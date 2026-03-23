@@ -171,15 +171,15 @@
                 </div>
 
                 <div class="form-section-title" style="color: #10b981;">Type of Assistance Requested</div>
-                <div class="analysis-grid" style="background: #f0fdf4; border-color: #10b981;">
-                    <?php 
-                    $types = ["Chemotherapy Assistance", "Cash Guarantee", "Surgery Financial Support", "Laboratory Assistance", "Dialysis Assistance", "Medical Cash Aid", "Medicine Assistance", "Hospital Bill Assistance"];
-                    foreach($types as $t): ?>
-                        <label class="option-item">
-                            <input type="radio" name="cause" value="<?php echo $t; ?>" required> <?php echo $t; ?>
-                        </label>
-                    <?php endforeach; ?>
-                </div>
+<div class="analysis-grid" style="background: #f0fdf4; border-color: #10b981;">
+    <?php 
+    $types = ["Chemotherapy Assistance", "Cash Guarantee", "Surgery Financial Support", "Laboratory Assistance", "Dialysis Assistance", "Medical Cash Aid", "Medicine Assistance", "Hospital Bill Assistance"];
+    foreach($types as $t): ?>
+        <label class="option-item">
+            <input type="radio" name="assistance_type" value="<?php echo $t; ?>" required> <?php echo $t; ?>
+        </label>
+    <?php endforeach; ?>
+</div>
 
                 <button type="submit" class="btn-submit">SYNC DATA & REGISTER APPLICANT</button>
             </form>
@@ -223,6 +223,19 @@
         </div>
     </div>
 </div>
+
+<script>
+document.getElementsByName('dob')[0].addEventListener('change', function() {
+    const dob = new Date(this.value);
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const m = today.getMonth() - dob.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+        age--;
+    }
+    document.getElementsByName('age')[0].value = age;
+});
+</script>
 
 </body>
 </html>
