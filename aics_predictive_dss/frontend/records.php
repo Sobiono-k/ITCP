@@ -1,7 +1,17 @@
 <?php
 // records.php
+
+session_start(); // THIS MUST BE THE VERY FIRST LINE
+
+if (!isset($_SESSION['role'])) {
+    header("Location: login.php");
+    exit();
+}
+
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
+
+require_once 'auth.php';
 
 // 1. Database Configuration
 $host = 'localhost';
@@ -16,8 +26,25 @@ if ($conn->connect_error) {
 }
 
 // --- ACTION HANDLER ---
+function verifyAdminAuth($password, $conn) {
+    $stmt = $conn->prepare("SELECT password FROM users WHERE role = 'Admin' LIMIT 1");
+    $stmt->execute();
+    $res = $stmt->get_result();
+    if ($row = $res->fetch_assoc()) {
+        return ($password === $row['password']);
+    }
+    return false;
+}
+
 // Handle Update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_record'])) {
+    if ($_SESSION['role'] === 'Staff') {
+        if (!isset($_POST['admin_pass']) || !verifyAdminAuth($_POST['admin_pass'], $conn)) {
+            header("Location: records.php?msg=auth_failed");
+            exit();
+        }
+    }
+    
     $id = (int)$_POST['edit_id'];
     $cause = $conn->real_escape_string($_POST['medical_cause']);
     $type = $conn->real_escape_string($_POST['assistance_type']);
@@ -29,16 +56,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_record'])) {
     exit();
 }
 
-// Handle Approve/Delete Actions
-if (isset($_GET['action']) && isset($_GET['id'])) {
-    $id = (int)$_GET['id'];
-    if ($_GET['action'] === 'approve') {
-        $conn->query("UPDATE aics_sample_data SET status='Approved' WHERE id=$id");
-        header("Location: records.php?msg=success");
-    } elseif ($_GET['action'] === 'delete') {
-        $conn->query("DELETE FROM aics_sample_data WHERE id=$id");
-        header("Location: records.php?msg=success");
+// Handle Delete
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_record'])) {
+    if ($_SESSION['role'] === 'Staff') {
+        if (!isset($_POST['admin_pass']) || !verifyAdminAuth($_POST['admin_pass'], $conn)) {
+            header("Location: records.php?msg=auth_failed");
+            exit();
+        }
     }
+    $id = (int)$_POST['delete_id'];
+    $conn->query("DELETE FROM aics_sample_data WHERE id = $id");
+    header("Location: records.php?msg=success");
+    exit();
+}
+
+// Handle Approve
+if (isset($_GET['action']) && $_GET['action'] === 'approve' && isset($_GET['id'])) {
+    $id = (int)$_GET['id'];
+    $conn->query("UPDATE aics_sample_data SET status='Approved' WHERE id=$id");
+    header("Location: records.php?msg=success");
     exit();
 }
 
@@ -55,7 +91,7 @@ $status_filter = isset($_GET['status_filter']) ? $conn->real_escape_string($_GET
 $start_date = isset($_GET['start']) ? $conn->real_escape_string($_GET['start']) : '';
 $end_date = isset($_GET['end']) ? $conn->real_escape_string($_GET['end']) : '';
 
-// 3. FETCH UNIQUE DROPDOWN VALUES (Crucial Fix)
+// 3. FETCH UNIQUE DROPDOWN VALUES
 $unique_causes = [];
 $res_c = $conn->query("SELECT DISTINCT medical_cause FROM aics_sample_data WHERE medical_cause != '' ORDER BY medical_cause ASC");
 while($r = $res_c->fetch_assoc()) $unique_causes[] = $r['medical_cause'];
@@ -78,12 +114,9 @@ $total_res = $conn->query("SELECT COUNT(*) as total FROM aics_sample_data WHERE 
 $total_records = $total_res->fetch_assoc()['total'];
 $total_pages = ceil($total_records / $limit);
 
-if ($page > $total_pages && $total_pages > 0) $page = $total_pages;
-
 $sql = "SELECT id, request_date, medical_cause, assistance_type, status 
         FROM aics_sample_data WHERE $where_str ORDER BY request_date DESC LIMIT $offset, $limit";
 $result = $conn->query($sql);
-
 $all_records = [];
 if ($result && $result->num_rows > 0) {
     while($row = $result->fetch_assoc()) { $all_records[] = $row; }
@@ -121,8 +154,6 @@ function getPaginationUrl($p, $l = null) {
         .input-field { padding: 10px 15px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; background: #fff; }
         .search-box { width: 100%; padding-left: 35px; box-sizing: border-box; }
         .filter-select { flex: 1; min-width: 150px; background: #f8fafc; cursor: pointer; }
-        .date-group { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #64748b; font-weight: 500; }
-        .date-input { border: 1px solid #e2e8f0; padding: 8px 12px; border-radius: 8px; font-family: inherit; }
         table { width: 100%; border-collapse: collapse; }
         th { text-align: left; padding: 15px 20px; background: #f8fafc; color: #64748b; font-size: 11px; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; }
         td { padding: 16px 20px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
@@ -142,19 +173,33 @@ function getPaginationUrl($p, $l = null) {
         .total-counter-box { background: #fff; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 15px; }
         .counter-icon { width: 45px; height: 45px; background: #eff6ff; color: #3b82f6; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
         .pagination-footer { padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-top: 1px solid #e2e8f0; }
-        .pagination-left { display: flex; align-items: center; gap: 15px; }
-        .pagination-info { font-size: 13px; color: #64748b; }
-        .page-search-wrapper { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #64748b; }
-        .page-input { width: 45px; padding: 5px; border: 1px solid #e2e8f0; border-radius: 6px; text-align: center; font-weight: 600; }
         .pagination-btns { display: flex; gap: 4px; }
         .pg-btn { padding: 6px 12px; border: 1px solid #e2e8f0; background: #fff; border-radius: 6px; text-decoration: none; color: #1e293b; font-size: 13px; font-weight: 600; transition: 0.1s; min-width: 32px; text-align: center; }
-        .pg-btn:hover { background: #f1f5f9; }
         .pg-btn.active { background: #3b82f6; color: #fff; border-color: #3b82f6; }
         .pg-btn.disabled { color: #cbd5e1; pointer-events: none; background: #f8fafc; }
         .modal-overlay { display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
         .modal-box { background: #fff; margin: 5% auto; padding: 30px; border-radius: 12px; width: 450px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; }
         .modal-input { width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 5px; box-sizing: border-box; font-family: inherit; }
         .toast-msg { position: fixed; top: 20px; right: 20px; background: #10b981; color: white; padding: 15px 25px; border-radius: 8px; z-index: 10000; font-weight: 600; }
+
+        /* FIXED PRINT CSS */
+        @media print {
+            .sidebar, .btn-print, .btn-recent, .filter-header, .pagination-footer, .no-print, .toast-msg { 
+                display: none !important; 
+            }
+            body { background: white; color: black; }
+            .main { 
+                margin-left: 0 !important; 
+                padding: 0 !important; 
+                width: 100% !important; 
+            }
+            .table-container { 
+                box-shadow: none !important; 
+                border: 1px solid #ccc !important; 
+            }
+            table { width: 100% !important; }
+            th, td { border: 1px solid #eee !important; }
+        }
     </style>
 </head>
 <body>
@@ -163,14 +208,14 @@ function getPaginationUrl($p, $l = null) {
 
 <div class="main">
     <?php if (isset($_GET['msg'])): ?>
-        <div id="toast" class="toast-msg">
-            <i class="fas fa-check-circle"></i>
-            <?php 
-                if($_GET['msg'] == 'updated') echo "Record updated successfully!";
-                elseif($_GET['msg'] == 'success') echo "Action completed successfully!";
-            ?>
-        </div>
-        <script>setTimeout(() => { document.getElementById('toast').style.display = 'none'; }, 3000);</script>
+    <div id="toast" class="toast-msg" style="<?php echo ($_GET['msg'] == 'auth_failed') ? 'background:#ef4444;' : ''; ?>">
+        <i class="fas <?php echo ($_GET['msg'] == 'auth_failed') ? 'fa-shield-alt' : 'fa-check-circle'; ?>"></i>
+        <?php 
+            if($_GET['msg'] == 'updated') echo "Record updated successfully!";
+            elseif($_GET['msg'] == 'success') echo "Action completed!";
+            elseif($_GET['msg'] == 'auth_failed') echo "Invalid Admin Credentials!";
+        ?>
+    </div>
     <?php endif; ?>
 
     <form id="filterForm" method="GET">
@@ -231,17 +276,6 @@ function getPaginationUrl($p, $l = null) {
 
                     <a href="records.php" class="btn-recent"><i class="fas fa-sync-alt"></i> Reset</a>
                 </div>
-
-                <div class="controls-row" style="margin-top: 10px;">
-                    <div class="date-group">
-                        <span>From:</span>
-                        <input type="date" name="start" class="date-input" value="<?php echo $start_date; ?>" onchange="this.form.submit()">
-                    </div>
-                    <div class="date-group">
-                        <span>To:</span>
-                        <input type="date" name="end" class="date-input" value="<?php echo $end_date; ?>" onchange="this.form.submit()">
-                    </div>
-                </div>
             </div>
 
             <table>
@@ -251,7 +285,7 @@ function getPaginationUrl($p, $l = null) {
                         <th style="width: 30%;">Medical Cause</th>
                         <th style="width: 25%;">Assistance Type</th>
                         <th style="width: 15%;">Status</th> 
-                        <th style="width: 15%; text-align: center;">Actions</th>
+                        <th style="width: 15%; text-align: center;" class="no-print">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -268,13 +302,15 @@ function getPaginationUrl($p, $l = null) {
                                 ?>
                                 <span class="status-badge <?php echo $s_class; ?>"><?php echo htmlspecialchars($s); ?></span>
                             </td>
-                            <td style="text-align: center;">
+                            <td style="text-align: center;" class="no-print">
                                 <button type="button" class="action-btn btn-edit" 
                                     onclick="openModal('<?php echo $row['id']; ?>', '<?php echo addslashes($row['medical_cause']); ?>', '<?php echo addslashes($row['assistance_type']); ?>', '<?php echo addslashes($row['status']); ?>', '<?php echo $row['request_date']; ?>')">
                                     <i class="fas fa-edit"></i>
                                 </button>
                                 <a href="records.php?action=approve&id=<?php echo $row['id']; ?>" class="action-btn btn-approve" onclick="return confirmAction('approve')"><i class="fas fa-check"></i></a>
-                                <a href="records.php?action=delete&id=<?php echo $row['id']; ?>" class="action-btn btn-delete" onclick="return confirmAction('delete')"><i class="fas fa-trash"></i></a>
+                                <button type="button" class="action-btn btn-delete" onclick="openDeleteModal('<?php echo $row['id']; ?>')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -284,42 +320,15 @@ function getPaginationUrl($p, $l = null) {
                 </tbody>
             </table>
 
-            <?php if (isset($_GET['new_id'])): ?>
-    <div class="alert-success" style="background: #dcfce7; color: #166534; padding: 15px; margin-bottom: 20px; border-radius: 8px;">
-        <i class="fas fa-check-circle"></i> 
-        Successfully registered! <strong>Applicant ID: #<?php echo $_GET['new_id']; ?></strong>
-    </div>
-<?php endif; ?>
-
             <?php if ($total_pages >= 1): ?>
             <div class="pagination-footer">
-                <div class="pagination-left">
-                    <div class="page-search-wrapper">
-                        Show rows: 
-                        <select class="page-input" style="width: 70px;" onchange="changeLimit(this.value)">
-                            <?php 
-                            $options = [10, 20, 50, 100, 250, 500];
-                            foreach($options as $opt): ?>
-                                <option value="<?php echo $opt; ?>" <?php if($limit == $opt) echo 'selected'; ?>><?php echo $opt; ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
-                    <div class="page-search-wrapper">
-                        Go to: 
-                        <input type="number" id="pageJump" class="page-input" min="1" max="<?php echo $total_pages; ?>" value="<?php echo $page; ?>" 
-                               onkeydown="if(event.key==='Enter'){ event.preventDefault(); jumpToPage(this.value); }">
-                    </div>
-                    
-                    <div class="pagination-info">
-                        <?php 
-                            $start_count = $offset + 1;
-                            $end_count = min($offset + $limit, $total_records);
-                            echo "$start_count - $end_count of $total_records"; 
-                        ?>
-                    </div>
+                <div class="pagination-info">
+                    <?php 
+                        $start_count = $offset + 1;
+                        $end_count = min($offset + $limit, $total_records);
+                        echo "$start_count - $end_count of $total_records"; 
+                    ?>
                 </div>
-                
                 <div class="pagination-btns">
                     <a href="<?php echo getPaginationUrl($page - 1); ?>" class="pg-btn <?php if($page <= 1) echo 'disabled'; ?>">
                         <i class="fas fa-chevron-left"></i>
@@ -340,17 +349,14 @@ function getPaginationUrl($p, $l = null) {
         <form method="POST">
             <input type="hidden" name="update_record" value="1">
             <input type="hidden" name="edit_id" id="m_id">
-            
             <div style="margin-bottom:15px;">
                 <label style="font-size:12px; font-weight:700;">REQUEST DATE</label>
                 <input type="date" name="request_date" id="m_date" class="modal-input" required>
             </div>
-
             <div style="margin-bottom:15px;">
                 <label style="font-size:12px; font-weight:700;">MEDICAL CAUSE</label>
                 <input type="text" name="medical_cause" id="m_cause" class="modal-input" required>
             </div>
-
             <div style="margin-bottom:15px;">
                 <label style="font-size:12px; font-weight:700;">ASSISTANCE TYPE</label>
                 <select name="assistance_type" id="m_type" class="modal-input" required>
@@ -360,7 +366,6 @@ function getPaginationUrl($p, $l = null) {
                     <option value="Food">Food</option>
                 </select>
             </div>
-
             <div style="margin-bottom:25px;">
                 <label style="font-size:12px; font-weight:700;">STATUS</label>
                 <select name="status" id="m_status" class="modal-input" required>
@@ -371,7 +376,12 @@ function getPaginationUrl($p, $l = null) {
                     <option value="Declined">Declined</option>
                 </select>
             </div>
-
+            <?php if($_SESSION['role'] === 'Staff'): ?>
+            <div style="background: #fff1f2; padding: 15px; border-radius: 8px; border: 1px solid #fecaca; margin-bottom: 20px;">
+                <label style="font-size:11px; color:#e11d48; font-weight:700;">ADMIN AUTHORIZATION REQUIRED</label>
+                <input type="password" name="admin_pass" class="modal-input" placeholder="Enter Admin Password" required>
+            </div>
+            <?php endif; ?>
             <div style="display:flex; justify-content: flex-end; gap: 10px;">
                 <button type="button" onclick="closeModal()" class="action-btn">Cancel</button>
                 <button type="submit" style="background:#3b82f6; color:#fff; border:none; padding:10px 20px; border-radius:8px; cursor:pointer;">Save Changes</button>
@@ -380,24 +390,40 @@ function getPaginationUrl($p, $l = null) {
     </div>
 </div>
 
+<div id="deleteModal" class="modal-overlay">
+    <div class="modal-box" style="width: 350px; text-align: center;">
+        <i class="fas fa-user-shield" style="font-size: 40px; color: #ef4444; margin-bottom: 15px;"></i>
+        <h3>Admin Authorization</h3>
+        <p style="font-size: 13px; color: #64748b;">Enter Admin credentials to delete this record.</p>
+        <form method="POST">
+            <input type="hidden" name="delete_record" value="1">
+            <input type="hidden" name="delete_id" id="d_id">
+            <input type="password" name="admin_pass" class="modal-input" placeholder="Enter Admin Password" required style="text-align: center; margin-bottom: 15px;">
+            <div style="display:flex; gap: 10px;">
+                <button type="button" onclick="closeDeleteModal()" class="action-btn" style="flex:1">Cancel</button>
+                <button type="submit" style="background:#ef4444; color:#fff; border:none; padding:10px; border-radius:8px; cursor:pointer; flex:1;">Confirm Delete</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
-function jumpToPage(p) {
-    const urlParams = new URLSearchParams(window.location.search);
-    urlParams.set('page', p);
-    window.location.search = urlParams.toString();
+function openDeleteModal(id) {
+    const userRole = "<?php echo $_SESSION['role']; ?>";
+    if (userRole === 'Admin') {
+        if(confirm("Are you sure you want to delete this record?")) {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.innerHTML = `<input type="hidden" name="delete_record" value="1"><input type="hidden" name="delete_id" value="${id}">`;
+            document.body.appendChild(form);
+            form.submit();
+        }
+    } else {
+        document.getElementById('d_id').value = id;
+        document.getElementById('deleteModal').style.display = 'block';
+    }
 }
-
-function changeLimit(l) {
-    const urlParams = new URLSearchParams(window.location.search);
-    urlParams.set('limit', l);
-    urlParams.set('page', 1);
-    window.location.search = urlParams.toString();
-}
-
-function confirmAction(type) {
-    return confirm("Are you sure you want to " + type + " this record?");
-}
-
+function closeDeleteModal() { document.getElementById('deleteModal').style.display = 'none'; }
 function openModal(id, cause, type, status, date) {
     document.getElementById('m_id').value = id;
     document.getElementById('m_date').value = date;
@@ -406,15 +432,12 @@ function openModal(id, cause, type, status, date) {
     document.getElementById('m_status').value = status.trim() || 'Pending';
     document.getElementById('editModal').style.display = 'block';
 }
-
-function closeModal() {
-    document.getElementById('editModal').style.display = 'none';
-}
-
-window.onclick = function(e) {
-    if (e.target == document.getElementById('editModal')) closeModal();
-}
+function closeModal() { document.getElementById('editModal').style.display = 'none'; }
+function confirmAction(type) { return confirm("Are you sure you want to " + type + " this record?"); }
+setTimeout(() => {
+    const toast = document.getElementById('toast');
+    if(toast) toast.style.display = 'none';
+}, 3000);
 </script>
-
 </body>
 </html>

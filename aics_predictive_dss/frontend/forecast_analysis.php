@@ -1,6 +1,13 @@
 <?php
 // forecast_analysis.php
 
+session_start(); // THIS MUST BE THE VERY FIRST LINE
+
+if (!isset($_SESSION['role'])) {
+    header("Location: login.php");
+    exit();
+}
+
 // 1. Database Configuration
 $host = 'localhost';
 $user = 'root';

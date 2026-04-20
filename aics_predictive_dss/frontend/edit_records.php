@@ -78,7 +78,7 @@ $result = $conn->query($sql);
         td { padding: 16px 20px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
         .badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; background: #eff6ff; color: #1d4ed8; }
         .input-field { width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 5px; box-sizing: border-box; font-family: inherit; }
-        .readonly-field { background-color: #f8fafc; cursor: not-allowed; color: #64748b; font-weight: 600; }
+        .readonly-field { background-color: #f8fafc; cursor: not-allowed; color: #64748b; font-weight: 600; border: 1px solid #e2e8f0; }
         .action-btn { padding: 6px; border-radius: 4px; border: 1px solid #e2e8f0; color: #64748b; cursor: pointer; text-decoration: none; font-size: 12px; margin-right: 5px; background: white; }
         .btn-edit { color: #3b82f6; } .btn-delete { color: #ef4444; } .btn-approve { color: #10b981; }
         .toast-msg { position: fixed; top: 20px; right: 20px; background: #10b981; color: white; padding: 15px 25px; border-radius: 8px; z-index: 3000; font-weight: 600; }
@@ -155,7 +155,7 @@ $result = $conn->query($sql);
             </div>
 
             <div style="margin-bottom:15px;">
-                <label style="font-size:12px; font-weight:700;">Assistance Type</label>
+                <label style="font-size:12px; font-weight:700;">Assistance Type (Locked)</label>
                 <input type="text" name="assistance_type" id="edit_type" class="input-field readonly-field" readonly>
             </div>
 
@@ -193,15 +193,13 @@ function setSelectValue(elementId, value) {
 }
 
 function openEditModal(id, cause, type, status, date) {
-    // Basic fields
     document.getElementById('edit_id').value = id;
     document.getElementById('edit_cause').value = cause;
     
-    // Fix Assistance Type assignment
+    // Assigns value to the read-only field
     const typeField = document.getElementById('edit_type');
     if(typeField) typeField.value = type ? type.trim() : "";
 
-    // Fix Date Formatting for HTML input (Requires YYYY-MM-DD)
     if(date) {
         const d = new Date(date);
         if(!isNaN(d.getTime())) {

@@ -1,4 +1,14 @@
-<?php $current_page = 'new_applicant.php'; ?>
+<?php $current_page = 'new_applicant.php'; 
+
+session_start(); // THIS MUST BE THE VERY FIRST LINE
+
+if (!isset($_SESSION['role'])) {
+    header("Location: login.php");
+    exit();
+}
+
+require_once 'auth.php';?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
