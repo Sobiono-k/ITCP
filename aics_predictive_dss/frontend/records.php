@@ -566,6 +566,24 @@ function closeModal() {
 
 function closeHistoryModal() { document.getElementById('historyModal').style.display = 'none'; }
 
+function openDeleteModal(id) {
+    // 1. Set the ID in the hidden input inside the delete modal
+    const idInput = document.getElementById('d_id');
+    if (idInput) {
+        idInput.value = id;
+    }
+    
+    // 2. Show the modal
+    const modal = document.getElementById('deleteModal');
+    if (modal) {
+        modal.style.display = 'block';
+    }
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteModal').style.display = 'none';
+}
+
 // Edit Modal Logic
 // FIXED Edit Modal Logic
 function openModal(id, cause, type, status, date, name, brgy, bdate, idNum) {
