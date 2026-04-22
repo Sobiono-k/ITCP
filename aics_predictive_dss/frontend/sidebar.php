@@ -10,7 +10,6 @@ $current_page = basename($_SERVER['PHP_SELF']);
 
 // Check if role exists, otherwise redirect to login or handle as guest
 if (!isset($_SESSION['role'])) {
-    // If no session exists, the user shouldn't be here
     header("Location: login.php");
     exit();
 }
@@ -18,13 +17,14 @@ if (!isset($_SESSION['role'])) {
 $user_role = $_SESSION['role'];
 ?>
 <div class="sidebar">
-    <div class="sidebar-header">
-        <i class="fas fa-hand-holding-heart"></i>
-        <div style="font-weight: 600; font-size: 1.2rem;">DSWD AICS</div>
-        <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">Batasan Hills Branch</div>
+    <div class="sidebar-header" style="padding: 30px 20px;">
+        <div style="margin-bottom: -10px;">
+            <img src="../images/dswdlogo.png" alt="QC Logo" style="width: 200px; height: auto; filter: drop-shadow(0 4px 6px rgba(43, 42, 42, 0.61));">
+        </div>
+        <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 4px;">Batasan Hills Branch</div>
     </div>
     
-    <nav style="display: flex; flex-direction: column; flex-grow: 1;">
+    <nav style="display: flex; flex-direction: column; flex-grow: 1; margin-top: 0px;">
         
         <?php if ($user_role === 'Admin'): ?>
         <a href="dashboard.php" class="<?php echo ($current_page == 'dashboard.php') ? 'active' : ''; ?>">
@@ -50,15 +50,19 @@ $user_role = $_SESSION['role'];
         <a href="reports.php" class="<?php echo ($current_page == 'reports.php') ? 'active' : ''; ?>">
             <i class="fas fa-file-invoice" style="margin-right: 12px; width: 20px;"></i> Reports
         </a>
-
         <?php endif; ?>
     </nav>
 
-    <div style="padding: 20px; border-top: 1px solid rgba(255,255,255,0.1);">
-        <div style="font-size: 11px; color: #64748b; margin-bottom: 10px; padding-left: 10px;">
-            Logged in as: <span style="color: #3b82f6; font-weight: bold;"><?php echo htmlspecialchars($user_role); ?></span>
+    <div style="padding: 20px; border-top: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.1);">
+        <div style="font-size: 10px; color: #64748b; margin-bottom: 8px; padding-left: 5px; text-transform: uppercase;">
+            Current Session
         </div>
-        <a href="login.php" style="padding: 10px; color: #f87171; border-left: none !important; background: transparent !important; display: flex; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 10px; padding-left: 5px; margin-bottom: 15px;">
+            <div style="width: 8px; height: 8px; background: #10b981; border-radius: 50%; box-shadow: 0 0 8px #10b981;"></div>
+            <span style="color: #fff; font-weight: 600; font-size: 13px;"><?php echo htmlspecialchars($user_role); ?></span>
+        </div>
+        
+        <a href="login.php" style="padding: 12px; color: #f87171; border-radius: 8px; transition: 0.3s; display: flex; align-items: center; text-decoration: none; font-size: 14px; font-weight: 600;">
             <i class="fas fa-sign-out-alt" style="margin-right: 12px;"></i> Logout
         </a>
     </div>

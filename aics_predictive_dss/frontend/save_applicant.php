@@ -1,5 +1,6 @@
 <?php
 // save_applicant.php
+
 $conn = new mysqli("localhost", "root", "", "aics_dss");
 
 if ($conn->connect_error) {
@@ -7,26 +8,27 @@ if ($conn->connect_error) {
 }
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // 1. Collect and Sanitize (Matching your NEW applicant form names)
+    // 1. Collect and Sanitize
     $date           = $conn->real_escape_string($_POST['date']);
-    $firstName      = $conn->real_escape_string($_POST['fname']); // Matches name="fname"
-    $lastName       = $conn->real_escape_string($_POST['lname']); // Matches name="lname"
+    $firstName      = $conn->real_escape_string($_POST['fname']);
+    $middleName     = isset($_POST['mname']) ? $conn->real_escape_string($_POST['mname']) : '';
+    $lastName       = $conn->real_escape_string($_POST['lname']);
+    $birthDate      = $conn->real_escape_string($_POST['birth_date']); // Added birth date
+    $barangay       = isset($_POST['barangay']) ? $conn->real_escape_string($_POST['barangay']) : 'Not Specified';
     $medicalCause   = $conn->real_escape_string($_POST['medical_cause']);
-    
-    // This catches the "Type of Assistance Requested" radio buttons
-    // Make sure you changed name="cause" to name="assistance_type" in your HTML!
     $assistanceType = isset($_POST['assistance_type']) ? $conn->real_escape_string($_POST['assistance_type']) : 'Not Specified';
 
-    // 2. The SQL Query
-    // Note: We don't insert 'id' because the database generates it automatically
-    $sql = "INSERT INTO aics_sample_data (request_date, medical_cause, assistance_type, status) 
-            VALUES ('$date', '$medicalCause', '$assistanceType', 'Pending')";
+    // 2. Updated SQL Query (Included birth_date, kept structure)
+    $sql = "INSERT INTO aics_sample_data (request_date, medical_cause, assistance_type, status, fname, mname, lname, birth_date, barangay) 
+            VALUES ('$date', '$medicalCause', '$assistanceType', 'Pending', '$firstName', '$middleName', '$lastName', '$birthDate', '$barangay')";
 
     if ($conn->query($sql) === TRUE) {
-        // 3. Get the ID Number that was just created
         $newID = $conn->insert_id;
         
-        // 4. Redirect with the new ID number in the URL
+        // Update id_number format (e.g., QC-0001)
+        $formattedID = "QC-" . str_pad($newID, 4, '0', STR_PAD_LEFT);
+        $conn->query("UPDATE aics_sample_data SET id_number = '$formattedID' WHERE id = $newID");
+
         header("Location: records.php?msg=success&new_id=" . $newID);
         exit();
     } else {

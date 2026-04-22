@@ -47,7 +47,6 @@ require_once 'auth.php';?>
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* Success Alert Styling */
         .alert-success {
             background: #dcfce7;
             color: #166534;
@@ -133,7 +132,10 @@ require_once 'auth.php';?>
                     <div class="col"><label>Last Name</label><input type="text" name="lname" required></div>
                 </div>
                 <div class="row">
-                    <div class="col"><label>Date of Birth</label><input type="date" name="dob" required></div>
+                    <div class="col">
+                        <label>Date of Birth</label>
+                        <input type="date" name="dob" value="<?php echo (isset($row['birth_date'])) ? date('Y-m-d', strtotime($row['birth_date'])) : ''; ?>" required>
+                    </div>
                     <div class="col"><label>Age</label><input type="number" name="age" required></div>
                     <div class="col"><label>Sex</label>
                         <select name="sex" required>
@@ -146,9 +148,22 @@ require_once 'auth.php';?>
                 <div class="row">
                     <div class="col"><label>Contact Number</label><input type="text" name="contact" required></div>
                 </div>
+                
                 <div class="row">
-                    <div class="col"><label>Complete Address</label><input type="text" name="address" required></div>
-                </div>
+    <div class="col" style="position: relative;">
+        <label>Barangay (Quezon City)</label>
+        <input type="text" name="barangay" id="barangay_search" placeholder="Type to search barangay..." autocomplete="off" required>
+        
+        <div id="brgy_suggestions" style="position: absolute; width: 100%; background: white; border: 1px solid #d2d6da; border-top: none; border-radius: 0 0 6px 6px; z-index: 100; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col">
+        <label>House No. / Street / Village</label>
+        <input type="text" name="address" placeholder="Unit/House No, Street Name" required>
+    </div>
+</div>
 
                 <div class="form-section-title">Monthly Household Income</div>
                 <div class="analysis-grid" style="margin-bottom: 15px;">
@@ -181,15 +196,15 @@ require_once 'auth.php';?>
                 </div>
 
                 <div class="form-section-title" style="color: #10b981;">Type of Assistance Requested</div>
-<div class="analysis-grid" style="background: #f0fdf4; border-color: #10b981;">
-    <?php 
-    $types = ["Chemotherapy Assistance", "Cash Guarantee", "Surgery Financial Support", "Laboratory Assistance", "Dialysis Assistance", "Medical Cash Aid", "Medicine Assistance", "Hospital Bill Assistance"];
-    foreach($types as $t): ?>
-        <label class="option-item">
-            <input type="radio" name="assistance_type" value="<?php echo $t; ?>" required> <?php echo $t; ?>
-        </label>
-    <?php endforeach; ?>
-</div>
+                <div class="analysis-grid" style="background: #f0fdf4; border-color: #10b981;">
+                    <?php 
+                    $types = ["Chemotherapy Assistance", "Cash Guarantee", "Surgery Financial Support", "Laboratory Assistance", "Dialysis Assistance", "Medical Cash Aid", "Medicine Assistance", "Hospital Bill Assistance"];
+                    foreach($types as $t): ?>
+                        <label class="option-item">
+                            <input type="radio" name="assistance_type" value="<?php echo $t; ?>" required> <?php echo $t; ?>
+                        </label>
+                    <?php endforeach; ?>
+                </div>
 
                 <button type="submit" class="btn-submit">SYNC DATA & REGISTER APPLICANT</button>
             </form>
@@ -235,6 +250,7 @@ require_once 'auth.php';?>
 </div>
 
 <script>
+    
 document.getElementsByName('dob')[0].addEventListener('change', function() {
     const dob = new Date(this.value);
     const today = new Date();
@@ -244,6 +260,51 @@ document.getElementsByName('dob')[0].addEventListener('change', function() {
         age--;
     }
     document.getElementsByName('age')[0].value = age;
+});
+
+const barangays = [
+    "Alicia", "Amihan", "Apolonio Samson", "Aurora", "Baesa", "Bagbag", "Bagong Lipunan ng Crame", "Bagong Pag-asa", "Bagong Silangan", "Bagumbayan", "Bagumbuhay", "Bahay Toro", "Balingasa", "Balong Bato", "Batasan Hills", "Bayanihan", "Blue Ridge A", "Blue Ridge B", "Botocan", "Bungad", "Camp Aguinaldo", "Capri", "Central", "Claro", "Commonwealth", "Culiat", "Damar", "Damayan", "Damayang Lagi", "Del Monte", "Dioquino Zobel", "Doña Aurora", "Doña Imelda", "Doña Josefa", "Don Manuel", "Duyan-duyan", "E. Rodriguez", "East Kamias", "Escopa I", "Escopa II", "Escopa III", "Escopa IV", "Fairview", "Greater Lagro", "Gulod", "Holy Spirit", "Horseshoe", "Immaculate Concepcion", "Kaligayahan", "Kalusugan", "Kamuning", "Katipunan", "Kaunlaran", "Kristong Hari", "Krus na Ligas", "Laging Handa", "Libis", "Lourdes", "Loyola Heights", "Maharlika", "Malaya", "Mangga", "Manresa", "Mariana", "Mariblo", "Marilag", "Masagana", "Masambong", "Matandang Balara", "Milagrosa", "N.S. Amoranto", "Nagkaisang Nayon", "Nayong Kanluran", "New Era", "North Fairview", "Novaliches Proper", "Obrero", "Old Capitol Site", "Paang Bundok", "Pag-ibig sa Nayon", "Paligsahan", "Paltok", "Pansol", "Paraiso", "Pasong Putik Proper", "Pasong Tamo", "Payatas", "Phil-Am", "Pinagkaisahan", "Pinyahan", "Project 6", "Quirino 2-A", "Quirino 2-B", "Quirino 2-C", "Quirino 3-A", "Ramon Magsaysay", "Roxas", "Sacred Heart", "Saint Ignatius", "Saint Peter", "Salvacion", "San Agustin", "San Antonio", "San Bartolome", "San Isidro", "San Isidro Labrador", "San Jose", "San Martin de Porres", "San Roque", "San Vicente", "Sangandaan", "Santa Cruz", "Santa Lucia", "Santa Monica", "Santa Teresita", "Santol", "Santo Cristo", "Santo Domingo", "Santo Niño", "Sauyo", "Sienna", "Sikatuna Village", "Silangan", "Socorro", "South Triangle", "Tagumpay", "Talayan", "Talipapa", "Tandang Sora", "Tatalon", "Teachers Village East", "Teachers Village West", "U.P. Campus", "U.P. Village", "Ugong Norte", "Unang Sigaw", "Valencia", "Vasra", "Veterans Village", "Villa Maria Clara", "West Kamias", "West Triangle", "White Plains"
+];
+
+const input = document.getElementById('barangay_search');
+const suggestionBox = document.getElementById('brgy_suggestions');
+
+input.addEventListener('input', function() {
+    const val = this.value.toLowerCase();
+    suggestionBox.innerHTML = '';
+    
+    if (!val) {
+        suggestionBox.style.display = 'none';
+        return;
+    }
+
+    // Filter and limit to FIRST 5 matches
+    const matches = barangays.filter(b => b.toLowerCase().includes(val)).slice(0, 5);
+
+    if (matches.length > 0) {
+        matches.forEach(m => {
+            const div = document.createElement('div');
+            div.innerHTML = m;
+            div.style.padding = '10px';
+            div.style.cursor = 'pointer';
+            div.style.fontSize = '13px';
+            div.onmouseover = () => div.style.background = '#f1f5f9';
+            div.onmouseout = () => div.style.background = 'white';
+            div.onclick = () => {
+                input.value = m;
+                suggestionBox.style.display = 'none';
+            };
+            suggestionBox.appendChild(div);
+        });
+        suggestionBox.style.display = 'block';
+    } else {
+        suggestionBox.style.display = 'none';
+    }
+});
+
+// Hide box if user clicks outside
+document.addEventListener('click', (e) => {
+    if (e.target !== input) suggestionBox.style.display = 'none';
 });
 </script>
 

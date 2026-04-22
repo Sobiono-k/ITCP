@@ -90,8 +90,29 @@ if ($table_res) {
 
 $topCause = !empty($top_3_causes) ? array_key_first($top_3_causes) : "No Data";
 
+// 4. Get Geographic Data for Heatmap
+$location_data = [];
+$loc_col = in_array('barangay', $cols) ? 'barangay' : (in_array('location', $cols) ? 'location' : null);
+
+if ($loc_col) {
+    // This query assumes you might have lat/lng columns. 
+    // If not, we will use a JS mapper for known Quezon City barangays.
+    $lat_col = in_array('latitude', $cols) ? 'latitude' : 'null';
+    $lng_col = in_array('longitude', $cols) ? 'longitude' : 'null';
+    
+    $loc_query = "SELECT `$loc_col` as name, $lat_col as lat, $lng_col as lng, COUNT(*) as count 
+                  FROM aics_sample_data GROUP BY `$loc_col` ORDER BY count DESC";
+    $loc_res = $conn->query($loc_query);
+    if ($loc_res) {
+        while($row = $loc_res->fetch_assoc()) { $location_data[] = $row; }
+    }
+}
+
 // Pass data to JS
-echo "<script>const csvData = " . json_encode($recent_records) . ";</script>";
+echo "<script>
+    const csvData = " . json_encode($recent_records) . ";
+    const mapData = " . json_encode($location_data) . ";
+</script>";
 ?>
 
 <!DOCTYPE html>
@@ -103,15 +124,48 @@ echo "<script>const csvData = " . json_encode($recent_records) . ";</script>";
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://leaflet.github.io/Leaflet.heat/dist/leaflet-heat.js"></script>
     <style>
+        * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    /* Prevents "jumping" when a scrollbar appears on longer pages */
+    overflow-y: scroll; 
+}
         /* ... Your styles stay the same ... */
         :root { --dswd-dark: #2c3e50; --sidebar-bg: #1e293b; --bg-color: #f8fafc; --card-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); --sidebar-width: 260px; }
         body { font-family: 'Inter', sans-serif; margin: 0; background: var(--bg-color); display: flex; color: #334155; }
         .sidebar { width: var(--sidebar-width); height: 100vh; background: var(--sidebar-bg); position: fixed; left: 0; top: 0; color: #fff; display: flex; flex-direction: column; z-index: 1000; }
         .sidebar-header { padding: 30px 20px; text-align: center; background: rgba(0,0,0,0.2); }
-        .sidebar a { padding: 15px 25px; text-decoration: none; color: #94a3b8; display: flex; align-items: center; transition: 0.3s; border-left: 4px solid transparent; }
-        .sidebar a:hover, .sidebar a.active { background: #334155; color: #fff; border-left: 4px solid #3b82f6; }
-        .main { margin-left: var(--sidebar-width); padding: 40px; width: calc(100% - var(--sidebar-width)); min-height: 100vh; box-sizing: border-box; }
+        .sidebar a {
+    padding: 15px 25px;
+    text-decoration: none;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    transition: all 0.3s ease;
+    /* FIX: Add this transparent border to reserve the 4px space */
+    border-left: 4px solid transparent; 
+}
+
+.sidebar a:hover, .sidebar a.active {
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    /* Now this just changes the color, not the layout size */
+    border-left: 4px solid #3b82f6; 
+}
+        .main {
+    margin-left: 260px; /* Must match your --sidebar-width */
+    padding: 40px;      /* Ensure this is the same on all pages */
+    width: calc(100% - 260px);
+    min-height: 100vh;
+}
         .header-area { margin-bottom: 30px; }
         .header-area h1 { margin: 0; font-size: 24px; color: var(--dswd-dark); }
         .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 30px; }
@@ -137,6 +191,8 @@ echo "<script>const csvData = " . json_encode($recent_records) . ";</script>";
         .insight-pipeline-a { border-left: 4px solid #3b82f6; background: #eff6ff; padding: 15px; border-radius: 8px; margin-bottom: 10px; }
         .insight-pipeline-b { border-left: 4px solid #8b5cf6; background: #f5f3ff; padding: 15px; border-radius: 8px; margin-bottom: 10px; }
         .insight-pipeline-c { border-left: 4px solid #0891b2; background: #ecfeff; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        #map { height: 250px; width: 100%; border-radius: 8px; margin-top: 15px; z-index: 1; }
+        .map-stats { display: flex; justify-content: space-between; align-items: center; }
     </style>
 </head>
 <body>
@@ -174,7 +230,14 @@ echo "<script>const csvData = " . json_encode($recent_records) . ";</script>";
     </div>
 
     <div class="grid-container">
-        <div class="section-box">
+    <div class="section-box">
+        <div class="map-stats">
+            <h2>Geographic Demand Heatmap</h2>
+            <small style="color: #64748b;"><i class="fas fa-map-marker-alt"></i> Quezon City Focus</small>
+        </div>
+        <div id="map"></div>
+        
+        <div style="margin-top: 30px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <h2>Request Volume Trend</h2>
                 <div class="chart-controls">
@@ -183,8 +246,9 @@ echo "<script>const csvData = " . json_encode($recent_records) . ";</script>";
                     <button id="btn-yearly" onclick="changeTimeframe('yearly')" class="tgl-btn">Yearly</button>
                 </div>
             </div>
-            <canvas id="volumeChart" height="130"></canvas>
+            <canvas id="volumeChart" height="100"></canvas>
         </div>
+    </div>
 
         <div class="section-box">
             <h2>Decision Insights</h2>
@@ -427,9 +491,131 @@ function changeTimeframe(unit) {
     updatePipelineInsights(unit);
 }
 
+function initHeatmap() {
+    const qcCenter = [14.6760, 121.0437]; // Quezon City Center
+    const map = L.map('map', { scrollWheelZoom: false }).setView([14.6839, 121.0860], 13); // Centered on Batasan Hills area
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+
+    // Coordinate Mapping (Fallback if your DB doesn't have Lat/Lng)
+    const coordMap = {
+    // District 1 (West Quezon City)
+    "Alicia": [14.6601, 121.0253],
+    "Bagong Pag-asa": [14.6544, 121.0336],
+    "Bahay Toro": [14.6713, 121.0264],
+    "Bungad": [14.6517, 121.0210],
+    "Del Monte": [14.6391, 121.0116],
+    "Laging Handa": [14.6367, 121.0360],
+    "Manresa": [14.6397, 121.0049],
+    "Nayon Kanluran": [14.6473, 121.0216],
+    "Paltok": [14.6394, 121.0179],
+    "Project 6": [14.6631, 121.0374],
+    "San Antonio": [14.6358, 121.0191],
+    "Vasra": [14.6512, 121.0435],
+
+    // District 2 (Batasan Area - High Volume)
+    "Batasan Hills": [14.6839, 121.0860],
+    "Commonwealth": [14.6826, 121.0608],
+    "Holy Spirit": [14.6845, 121.0710],
+    "Payatas": [14.7136, 121.1064],
+    "Bagong Silangan": [14.7042, 121.1121],
+
+    // District 3 (Cubao/Anonas Area)
+    "Bagumbayan": [14.6074, 121.0792],
+    "E. Rodriguez": [14.6289, 121.0583],
+    "Libis": [14.6111, 121.0772],
+    "Loyola Heights": [14.6385, 121.0744],
+    "Matandang Balara": [14.6617, 121.0811],
+    "Pansol": [14.6436, 121.0784],
+    "San Roque": [14.6178, 121.0631],
+    "Socorro": [14.6200, 121.0544],
+    "Ugong Norte": [14.5960, 121.0640],
+    "White Plains": [14.6040, 121.0638],
+
+    // District 4 (Central / Diliman Area)
+    "Bagong Lipunan ng Crame": [14.6094, 121.0519],
+    "Don Manuel": [14.6190, 121.0116],
+    "Immaculate Concepcion": [14.6212, 121.0409],
+    "Kamuning": [14.6294, 121.0390],
+    "Kaunlaran": [14.6172, 121.0475],
+    "Kristong Hari": [14.6216, 121.0298],
+    "Obrero": [14.6285, 121.0297],
+    "Pinagkaisahan": [14.6240, 121.0494],
+    "Sacred Heart": [14.6341, 121.0396],
+    "San Martin de Porres": [14.6158, 121.0511],
+    "Tatalon": [14.6213, 121.0189],
+    "U.P. Campus": [14.6549, 121.0652],
+    "U.P. Village": [14.6469, 121.0560],
+
+    // District 5 (Fairview/Novaliches Area)
+    "Fairview": [14.7011, 121.0583],
+    "Greater Lagro": [14.7194, 121.0654],
+    "Pasong Putik": [14.7327, 121.0604],
+    "North Fairview": [14.6994, 121.0519],
+    "Santa Monica": [14.7126, 121.0456],
+    "Gulod": [14.7042, 121.0371],
+    "San Bartolome": [14.6908, 121.0347],
+    "Bagbag": [14.6967, 121.0336],
+    "Nagkaisang Nayon": [14.7176, 121.0315],
+    "Novaliches Proper": [14.7000, 121.0333],
+    "San Agustin": [14.7077, 121.0402],
+
+    // District 6 (Tandang Sora Area)
+    "Tandang Sora": [14.6775, 121.0433],
+    "Pasong Tamo": [14.6732, 121.0610],
+    "Culiat": [14.6644, 121.0515],
+    "Sauyo": [14.6896, 121.0431],
+    "Talipapa": [14.6901, 121.0208],
+    "Baesa": [14.6706, 121.0113],
+    "Sangandaan": [14.6749, 121.0252],
+    "Apolonio Samson": [14.6534, 121.0069],
+    "Unang Sigaw": [14.6538, 121.0016],
+
+    // Common Fallbacks / General Labels
+    "Fairview Village": [14.7011, 121.0583],
+    "Project 4": [14.6191, 121.0682],
+    "Project 8": [14.6756, 121.0219]
+};
+
+
+    const heatPoints = mapData.map(loc => {
+    // 1. Clean the name from the database (remove spaces, make it case-insensitive)
+    const dbName = loc.name ? loc.name.trim() : "";
+    
+    // 2. Check if this name exists in your coordMap
+    const coords = (loc.lat && loc.lng) ? [loc.lat, loc.lng] : coordMap[dbName];
+
+    // 3. ONLY return the point if coords were actually found
+    if (coords) {
+        // TURN RED THRESHOLD:
+        // loc.count / 10 means if count is 10, intensity is 1.0 (Solid Red).
+        // If count is 5, intensity is 0.5 (Green/Orange).
+        const intensity = Math.min(loc.count / 10, 1); 
+        
+        return [...coords, intensity];
+    }
+    return null;
+}).filter(point => point !== null); // 4. REMOVE all the null/fallback points
+
+    L.heatLayer(heatPoints, {
+    radius: 20, 
+    blur: 15,
+    max: 1.0,           // ADD THIS: It stops a single point from "exploding"
+    maxZoom: 17,
+    gradient: {
+        0.2: 'blue', 
+        0.5: 'lime', 
+        1.0: 'red'
+    }
+}).addTo(map);
+}
+
 window.onload = () => {
     changeTimeframe('monthly');
     filterTable();
+    initHeatmap(); // Initialize map
 };
 </script>
 </body>
