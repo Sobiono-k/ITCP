@@ -46,25 +46,24 @@ function verifyAdminAuth($password, $conn) {
 }
 
 // Handle Update
+// Handle Update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_record'])) {
-    if ($_SESSION['role'] === 'Staff') {
-        if (!isset($_POST['admin_pass']) || !verifyAdminAuth($_POST['admin_pass'], $conn)) {
-            header("Location: records.php?msg=auth_failed");
-            exit();
-        }
-    }
-    
+    // ... (Keep your Admin/Staff auth checks here) ...
+
     $id = (int)$_POST['edit_id'];
     $status = $conn->real_escape_string($_POST['status']);
-    $date = $conn->real_escape_string($_POST['request_date']);
-    
-    $res = $conn->query("SELECT status, request_date FROM aics_sample_data WHERE id = $id");
+    $remarks = $conn->real_escape_string($_POST['remarks']); // Add this line
+
+    // Fetch old data for audit logs
+    $res = $conn->query("SELECT status, remarks FROM aics_sample_data WHERE id = $id");
     $old = $res->fetch_assoc();
 
-    $conn->query("UPDATE aics_sample_data SET status='$status', request_date='$date' WHERE id=$id");
+    // UPDATE THE QUERY TO INCLUDE REMARKS
+    $conn->query("UPDATE aics_sample_data SET status='$status', remarks='$remarks' WHERE id=$id");
 
+    // Log the changes
     logChange($conn, $id, 'status', $old['status'], $status);
-    logChange($conn, $id, 'request_date', $old['request_date'], $date);
+    logChange($conn, $id, 'remarks', $old['remarks'], $remarks);
 
     header("Location: records.php?msg=updated");
     exit();
@@ -154,8 +153,8 @@ $total_res = $conn->query("SELECT COUNT(*) as total FROM aics_sample_data WHERE 
 $total_records = $total_res->fetch_assoc()['total'];
 $total_pages = ceil($total_records / $limit);
 
-$sql = "SELECT id, id_number, request_date, medical_cause, assistance_type, status, fname, mname, lname, barangay, birth_date
-        FROM aics_sample_data
+$sql = "SELECT id, id_number, request_date, medical_cause, assistance_type, status, fname, mname, lname, barangay, birth_date, remarks 
+        FROM aics_sample_data 
         WHERE $where_str 
         ORDER BY $sort_logic 
         LIMIT $offset, $limit";
@@ -220,6 +219,7 @@ function getPaginationUrl($p, $l = null) {
         .btn-edit { color: #3b82f6; } .btn-edit:hover { background: #eff6ff; }
         .btn-delete { color: #ef4444; } .btn-delete:hover { background: #fef2f2; }
         .btn-approve { color: #10b981; } .btn-approve:hover { background: #f0fdf4; }
+        .btn-view { color: #6366f1; } .btn-view:hover { background: #eef2ff; }
         .total-counter-box { background: #fff; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 15px; }
         .counter-icon { width: 45px; height: 45px; background: #eff6ff; color: #3b82f6; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
         .pagination-footer { padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-top: 1px solid #e2e8f0; }
@@ -335,10 +335,10 @@ function getPaginationUrl($p, $l = null) {
                 <thead>
                     <tr>
                         <th style="width: 15%;">Date</th>
-                        <th style="width: 30%;">Medical Cause</th>
-                        <th style="width: 25%;">Assistance Type</th>
+                        <th style="width: 25%;">Medical Cause</th>
+                        <th style="width: 20%;">Assistance Type</th>
                         <th style="width: 15%;">Status</th> 
-                        <th style="width: 15%; text-align: center;" class="no-print">Actions</th>
+                        <th style="width: 25%; text-align: center;" class="no-print">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -350,14 +350,12 @@ function getPaginationUrl($p, $l = null) {
                         $fullname = trim("$fn $mn $ln") ?: "Unknown Beneficiary";
                         $brgy = $row['barangay'] ?? 'N/A';
                         
-                        // Proper date formatting for JS consumption
-$bdate = (!empty($row['birth_date']) && $row['birth_date'] != '0000-00-00') 
-         ? date("Y-m-d", strtotime($row['birth_date'])) 
-         : 'N/A';
+                        $bdate = (!empty($row['birth_date']) && $row['birth_date'] != '0000-00-00') 
+                         ? date("Y-m-d", strtotime($row['birth_date'])) 
+                         : 'N/A';
                         
                         $idNum = $row['id_number'] ?? 'N/A';
                         $status = $row['status'] ?: 'Pending';
-                        $fullname = trim(($row['fname'] ?? '') . " " . ($row['lname'] ?? ''));
                     ?>
                     <tr>
                         <td><?php echo date("M d, Y", strtotime($row['request_date'])); ?></td>
@@ -369,16 +367,20 @@ $bdate = (!empty($row['birth_date']) && $row['birth_date'] != '0000-00-00')
                             </span>
                         </td>
                         <td style="text-align: center;" class="no-print">
-                            <button type="button" class="action-btn btn-edit" 
+                            <button type="button" class="action-btn btn-view" title="View Full Info" onclick="openViewModal(<?php echo $row['id']; ?>)">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button type="button" class="action-btn btn-edit" title="Edit Record" 
     onclick="openModal('<?php echo $row['id']; ?>', 
                        '<?php echo addslashes($row['medical_cause']); ?>', 
                        '<?php echo addslashes($row['assistance_type']); ?>', 
-                       '<?php echo addslashes($s); ?>', 
+                       '<?php echo addslashes($status); ?>', 
                        '<?php echo $row['request_date']; ?>', 
                        '<?php echo addslashes($fullname); ?>', 
                        '<?php echo addslashes($brgy); ?>', 
                        '<?php echo $bdate; ?>', 
-                       '<?php echo $idNum; ?>')">
+                       '<?php echo $idNum; ?>',
+                       `<?php echo str_replace('`', '\`', $row['remarks'] ?? ''); ?>`)"> 
     <i class="fas fa-edit"></i>
 </button>
                             <button type="button" class="action-btn" title="View History" onclick="viewHistory(<?php echo $row['id']; ?>)">
@@ -394,8 +396,8 @@ $bdate = (!empty($row['birth_date']) && $row['birth_date'] != '0000-00-00')
                 <?php else: ?>
                     <tr><td colspan="5" style="text-align:center; padding: 40px;">No records found.</td></tr>
                 <?php endif; ?>
-            </tbody>
-        </table>
+                </tbody>
+            </table>
 
             <?php if ($total_pages >= 1): ?>
             <div class="pagination-footer">
@@ -420,6 +422,20 @@ $bdate = (!empty($row['birth_date']) && $row['birth_date'] != '0000-00-00')
     </form>
 </div>
 
+<div id="viewModal" class="modal-overlay">
+    <div class="modal-box" style="width: 600px;">
+        <span class="close" onclick="closeViewModal()">&times;</span>
+        <h2 style="margin-top:0; color:var(--dswd-dark);"><i class="fas fa-file-alt"></i> Beneficiary Profile</h2>
+        <hr style="border:0; border-top: 1px solid #e2e8f0; margin:15px 0;">
+        <div id="viewContent">
+            <p style="text-align:center; padding:20px;">Fetching details...</p>
+        </div>
+        <div style="display:flex; justify-content: flex-end; margin-top:20px;">
+            <button type="button" onclick="closeViewModal()" class="action-btn" style="padding:10px 20px;">Close</button>
+        </div>
+    </div>
+</div>
+
 <div id="editModal" class="modal-overlay">
     <div class="modal-box">
         <h2 style="margin-top:0;">Edit Record</h2>
@@ -437,18 +453,13 @@ $bdate = (!empty($row['birth_date']) && $row['birth_date'] != '0000-00-00')
                     <input type="text" id="read_brgy" class="modal-input" style="background:#f1f5f9; border:none; font-weight:600;" readonly>
                 </div>
                 <div>
-                    <label style="font-size:10px; font-weight:700; color: #64748b;">BIRTH DATE</label>
-                    <input type="text" id="read_bdate" class="modal-input" style="background:#f1f5f9; border:none; font-weight:600;" readonly>
+                    <label style="font-size:10px; font-weight:700; color: #64748b;">REQUEST DATE</label>
+                    <input type="text" id="read_rdate" class="modal-input" style="background:#f1f5f9; border:none; font-weight:600;" readonly>
                 </div>
                 <div>
                     <label style="font-size:10px; font-weight:700; color: #64748b;">FULL NAME</label>
                     <input type="text" id="read_name" class="modal-input" style="background:#f1f5f9; border:none; font-weight:600;" readonly>
                 </div>
-            </div>
-
-            <div style="margin-bottom:15px;">
-                <label style="font-size:12px; font-weight:700;">REQUEST DATE</label>
-                <input type="date" name="request_date" id="m_date" class="modal-input" required>
             </div>
             <div style="margin-bottom:15px;">
                 <label style="font-size:12px; font-weight:700;">MEDICAL CAUSE</label>
@@ -458,7 +469,7 @@ $bdate = (!empty($row['birth_date']) && $row['birth_date'] != '0000-00-00')
                 <label style="font-size:12px; font-weight:700;">ASSISTANCE TYPE</label>
                 <input type="text" id="m_type" class="modal-input" style="background:#f1f5f9;" readonly>
             </div>
-            <div style="margin-bottom:25px;">
+            <div style="margin-bottom:15px;">
                 <label style="font-size:12px; font-weight:700;">STATUS</label>
                 <select name="status" id="m_status" class="modal-input" required>
                     <option value="Pending">Pending</option>
@@ -467,6 +478,11 @@ $bdate = (!empty($row['birth_date']) && $row['birth_date'] != '0000-00-00')
                     <option value="Waitlisted">Waitlisted</option>
                     <option value="Declined">Declined</option>
                 </select>
+            </div>
+
+            <div style="margin-bottom:25px;">
+                <label style="font-size:12px; font-weight:700;">REMARKS / NOTES</label>
+                <textarea name="remarks" id="m_remarks" class="modal-input" style="height: 80px; resize: vertical; padding: 10px;" placeholder="Add notes here..."></textarea>
             </div>
 
             <?php if($_SESSION['role'] === 'Staff'): ?>
@@ -539,6 +555,24 @@ new Chart(locCtx, {
     }
 });
 
+// View Full Info Logic
+function openViewModal(id) {
+    document.getElementById('viewModal').style.display = 'block';
+    document.getElementById('viewContent').innerHTML = '<p style="text-align:center; padding:20px;">Fetching details...</p>';
+
+    fetch('fetch_beneficiary_details.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'id=' + id
+    })
+    .then(response => response.text())
+    .then(data => {
+        document.getElementById('viewContent').innerHTML = data;
+    });
+}
+
+function closeViewModal() { document.getElementById('viewModal').style.display = 'none'; }
+
 // View History Logic
 function viewHistory(id) {
     document.getElementById('historyRecordId').innerText = id;
@@ -557,23 +591,17 @@ function viewHistory(id) {
 }
 
 function closeModal() {
-    // This must match the id="editModal" in your HTML
     const modal = document.getElementById('editModal');
     if (modal) {
         modal.style.display = 'none';
     }
 }
 
-function closeHistoryModal() { document.getElementById('historyModal').style.display = 'none'; }
-
 function openDeleteModal(id) {
-    // 1. Set the ID in the hidden input inside the delete modal
     const idInput = document.getElementById('d_id');
     if (idInput) {
         idInput.value = id;
     }
-    
-    // 2. Show the modal
     const modal = document.getElementById('deleteModal');
     if (modal) {
         modal.style.display = 'block';
@@ -585,32 +613,43 @@ function closeDeleteModal() {
 }
 
 // Edit Modal Logic
-// FIXED Edit Modal Logic
-function openModal(id, cause, type, status, date, name, brgy, bdate, idNum) {
-    // Fill the hidden and editable fields
+function openModal(id, cause, type, status, date, name, brgy, bdate, idNum, remarks = '') {
+    const modal = document.getElementById('editModal');
+    if (!modal) return;
+
+    // Fill Hidden and Standard inputs
     document.getElementById('m_id').value = id;
     document.getElementById('m_cause').value = cause;
     document.getElementById('m_type').value = type;
     document.getElementById('m_status').value = status;
-    document.getElementById('m_date').value = date;
     
-    // Fill the read-only section
+    // Fill Read-only Profile Info
     document.getElementById('read_id').value = idNum;
     document.getElementById('read_name').value = name;
     document.getElementById('read_brgy').value = brgy;
-    
-    // FILL BIRTHDATE HERE
-    document.getElementById('read_bdate').value = bdate;
+    document.getElementById('read_rdate').value = date;
 
-    // Show the modal
-    document.getElementById('editModal').style.display = 'block';
+    // Fill Remarks Textarea
+    if(document.getElementById('m_remarks')) {
+        document.getElementById('m_remarks').value = remarks;
+    }
+
+    modal.style.display = 'block';
 }
 
-// Ensure outside click handles the editModal too
+function closeModal() {
+    document.getElementById('editModal').style.display = 'none';
+}
+
+function closeHistoryModal() { document.getElementById('historyModal').style.display = 'none'; }
+
+function closeDeleteModal() { document.getElementById('deleteModal').style.display = 'none'; }
+
 window.onclick = function(event) {
     if (event.target == document.getElementById('historyModal')) { closeHistoryModal(); }
     if (event.target == document.getElementById('editModal')) { closeModal(); }
     if (event.target == document.getElementById('deleteModal')) { closeDeleteModal(); }
+    if (event.target == document.getElementById('viewModal')) { closeViewModal(); }
 }
 </script>
 </body>

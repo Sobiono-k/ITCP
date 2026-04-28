@@ -132,19 +132,19 @@ require_once 'auth.php';?>
                     <div class="col"><label>Last Name</label><input type="text" name="lname" required></div>
                 </div>
                 <div class="row">
-                    <div class="col">
-                        <label>Date of Birth</label>
-                        <input type="date" name="dob" value="<?php echo (isset($row['birth_date'])) ? date('Y-m-d', strtotime($row['birth_date'])) : ''; ?>" required>
-                    </div>
-                    <div class="col"><label>Age</label><input type="number" name="age" required></div>
-                    <div class="col"><label>Sex</label>
-                        <select name="sex" required>
-                            <option value="">Select</option>
-                            <option value="Male">Male</option>
-                            <option value="Female">Female</option>
-                        </select>
-                    </div>
-                </div>
+    <div class="col">
+        <label>Date of Birth</label>
+        <input type="date" name="dob" id="dob_input" value="<?php echo (!empty($row['birth_date']) && $row['birth_date'] != '0000-00-00') ? date('Y-m-d', strtotime($row['birth_date'])) : ''; ?>" required>
+    </div>
+    <div class="col"><label>Age</label><input type="number" name="age" id="age_input" required></div>
+    <div class="col"><label>Sex</label>
+        <select name="sex" required>
+            <option value="">Select</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+        </select>
+    </div>
+</div>
                 <div class="row">
                     <div class="col"><label>Contact Number</label><input type="text" name="contact" required></div>
                 </div>
@@ -252,14 +252,22 @@ require_once 'auth.php';?>
 <script>
     
 document.getElementsByName('dob')[0].addEventListener('change', function() {
+    if(!this.value) return; // Exit if empty
+    
     const dob = new Date(this.value);
     const today = new Date();
     let age = today.getFullYear() - dob.getFullYear();
     const m = today.getMonth() - dob.getMonth();
+    
     if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
         age--;
     }
-    document.getElementsByName('age')[0].value = age;
+    
+    // Set the age value
+    const ageField = document.getElementsByName('age')[0];
+    if(ageField) {
+        ageField.value = age;
+    }
 });
 
 const barangays = [
