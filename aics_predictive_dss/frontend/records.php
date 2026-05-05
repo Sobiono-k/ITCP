@@ -21,6 +21,8 @@ $db   = 'aics_dss';
 
 $conn = new mysqli($host, $user, $pass, $db);
 
+
+
 if ($conn->connect_error) {
     die("<div style='color:red; padding:20px; background:#fee2e2;'>Database Connection Error: " . $conn->connect_error . "</div>");
 }
@@ -45,7 +47,6 @@ function verifyAdminAuth($password, $conn) {
     return false;
 }
 
-// Handle Update
 // Handle Update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_record'])) {
     // ... (Keep your Admin/Staff auth checks here) ...
@@ -160,9 +161,30 @@ $sql = "SELECT id, id_number, request_date, medical_cause, assistance_type, stat
         LIMIT $offset, $limit";
 
 $result = $conn->query($sql);
+
+if (!$result) {
+    // If this triggers, your database column names probably don't match the query
+    die("<div style='background:#fee2e2; color:#b91c1c; padding:20px; border-radius:8px; margin:20px;'>
+            <strong>Database Query Error:</strong> " . $conn->error . "<br>
+            <em>Check if columns like 'remarks' or 'id_number' actually exist in your table.</em>
+         </div>");
+}
+
 $all_records = [];
-if ($result && $result->num_rows > 0) {
-    while($row = $result->fetch_assoc()) { $all_records[] = $row; }
+if ($result->num_rows > 0) {
+    while($row = $result->fetch_assoc()) { 
+        $all_records[] = $row; 
+    }
+} else {
+    // 4. Debug: If table is empty, check if ANY data exists at all
+    $check_total = $conn->query("SELECT COUNT(*) as total FROM aics_sample_data");
+    $total_in_db = $check_total->fetch_assoc()['total'];
+    
+    if ($total_in_db > 0) {
+        $debug_msg = "The database has $total_in_db records, but your current filters are hiding them.";
+    } else {
+        $debug_msg = "The database table 'aics_sample_data' is currently empty.";
+    }
 }
 
 function getPaginationUrl($p, $l = null) {

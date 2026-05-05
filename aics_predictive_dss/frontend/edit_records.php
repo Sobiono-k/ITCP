@@ -34,10 +34,9 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
     $id = (int)$_GET['id'];
     
     if ($_GET['action'] === 'delete') {
-        // Optional: Log deletion before it happens
+    if ($current_role === 'Admin') { // Only allow Admin to delete
         $conn->query("INSERT INTO audit_logs (record_id, action_type, changed_column) VALUES ($id, 'DELETE', 'all_record')");
         $conn->query("DELETE FROM aics_sample_data WHERE id = $id");
-        
     } elseif ($_GET['action'] === 'approve') {
         // Get old status for the log
         $res = $conn->query("SELECT status FROM aics_sample_data WHERE id = $id");
@@ -74,4 +73,5 @@ if (isset($_POST['update_action']) && $_POST['update_action'] === 'update_record
 
     header("Location: records.php?msg=updated");
     exit();
+}
 }
