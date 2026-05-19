@@ -132,38 +132,95 @@ require_once 'auth.php';?>
                     <div class="col"><label>Last Name</label><input type="text" name="lname" required></div>
                 </div>
                 <div class="row">
-    <div class="col">
-        <label>Date of Birth</label>
-        <input type="date" name="dob" id="dob_input" value="<?php echo (!empty($row['birth_date']) && $row['birth_date'] != '0000-00-00') ? date('Y-m-d', strtotime($row['birth_date'])) : ''; ?>" required>
-    </div>
-    <div class="col"><label>Age</label><input type="number" name="age" id="age_input" required></div>
-    <div class="col"><label>Sex</label>
-        <select name="sex" required>
-            <option value="">Select</option>
-            <option value="Male">Male</option>
-            <option value="Female">Female</option>
-        </select>
-    </div>
-</div>
+                    <div class="col">
+                        <label>Date of Birth</label>
+                        <input type="date" name="dob" id="dob_input" value="<?php echo (!empty($row['birth_date']) && $row['birth_date'] != '0000-00-00') ? date('Y-m-d', strtotime($row['birth_date'])) : ''; ?>" required>
+                    </div>
+                    <div class="col"><label>Age</label><input type="number" name="age" id="age_input" required></div>
+                    <div class="col"><label>Sex</label>
+                        <select name="sex" required>
+                            <option value="">Select</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                        </select>
+                    </div>
+                    <div class="col"><label>Civil Status</label>
+                        <select name="civil_status" required>
+                            <option value="">Select</option>
+                            <option value="Single">Single</option>
+                            <option value="Married">Married</option>
+                            <option value="Widowed">Widowed</option>
+                            <option value="Separated">Separated</option>
+                            <option value="Common-law">Common-law / Live-in</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="row">
                     <div class="col"><label>Contact Number</label><input type="text" name="contact" required></div>
                 </div>
                 
                 <div class="row">
-    <div class="col" style="position: relative;">
-        <label>Barangay (Quezon City)</label>
-        <input type="text" name="barangay" id="barangay_search" placeholder="Type to search barangay..." autocomplete="off" required>
-        
-        <div id="brgy_suggestions" style="position: absolute; width: 100%; background: white; border: 1px solid #d2d6da; border-top: none; border-radius: 0 0 6px 6px; z-index: 100; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>
-    </div>
-</div>
+                    <div class="col" style="position: relative;">
+                        <label>Barangay (Quezon City)</label>
+                        <input type="text" name="barangay" id="barangay_search" placeholder="Type to search barangay..." autocomplete="off" required>
+                        
+                        <div id="brgy_suggestions" style="position: absolute; width: 100%; background: white; border: 1px solid #d2d6da; border-top: none; border-radius: 0 0 6px 6px; z-index: 100; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>
+                    </div>
+                </div>
 
-<div class="row">
-    <div class="col">
-        <label>House No. / Street / Village</label>
-        <input type="text" name="address" placeholder="Unit/House No, Street Name" required>
-    </div>
-</div>
+                <div class="row">
+                    <div class="col">
+                        <label>House No. / Street / Village</label>
+                        <input type="text" name="address" placeholder="Unit/House No, Street Name" required>
+                    </div>
+                </div>
+
+                <div class="form-section-title" style="color: #6366f1;">Client Category / Sector</div>
+                <div class="analysis-grid" style="margin-bottom: 15px; background: #f5f3ff; border-color: #c084fc;">
+                    <?php 
+                    $categories = [
+                        "Family Heads and Other Needy Adult", 
+                        "Persons with Disabilities", 
+                        "Senior Citizens", 
+                        "Men/Women in Specially Difficult Circumstances"
+                    ];
+                    foreach($categories as $cat): ?>
+                        <label class="option-item">
+                            <input type="radio" name="client_category" value="<?php echo $cat; ?>" required> <?php echo $cat; ?>
+                        </label>
+                    <?php endforeach; ?>
+                </div>
+
+                <div class="form-section-title" style="color: #a855f7;">Client Subcategory</div>
+                <div class="analysis-grid" style="margin-bottom: 15px; background: #faf5ff; border-color: #e9d5ff;">
+                    <?php 
+                    $subcategories = [
+                        "Individuals with Cancer",
+                        "Dialysis Patients",
+                        "Chronic Illness / Geriatric Conditions",
+                        "Tuberculosis Patients",
+                        "Rare Disease / Disability caused by Rare Disease",
+                        "Physical Disability / Orthopedically Handicapped",
+                        "Visual Disability / Visually Impaired",
+                        "Hearing/Speech Impaired",
+                        "Psychosocial/Mental/Learning Disability",
+                        "Intellectual Disability / Mentally Challenged",
+                        "Non-apparent Speech and Language Impairment",
+                        "Victims of Disaster",
+                        "Internally Displaced Family",
+                        "Person of Concerns - Asylum Seeker / Refugee / Stateless Persons",
+                        "Physically-abused/maltreated/battered",
+                        "Victims of involuntary prostitution",
+                        "Recovering Person who used Drugs",
+                        "Wounded in Action (WIA)",
+                        "Others specify"
+                    ];
+                    foreach($subcategories as $sub): ?>
+                        <label class="option-item">
+                            <input type="radio" name="client_subcategory" value="<?php echo $sub; ?>" required> <?php echo $sub; ?>
+                        </label>
+                    <?php endforeach; ?>
+                </div>
 
                 <div class="form-section-title">Monthly Household Income</div>
                 <div class="analysis-grid" style="margin-bottom: 15px;">
@@ -184,10 +241,10 @@ require_once 'auth.php';?>
                     <div class="col"><label>Diagnosis</label><input type="text" name="diagnosis"></div>
                 </div>
 
-                <div class="form-section-title" style="color: #3b82f6;">Medical Cause (For Data Analysis)</div>
+                <div class="form-section-title" style="color: #3b82f6;">Medical Cause</div>
                 <div class="analysis-grid">
                     <?php 
-                    $causes = ["Medication Assistance", "Medical Checkup", "Emergency Treatment", "Maternity Care", "Chemotherapy", "Surgery", "Hospitalization", "Laboratory Tests", "Accident Injury", "Dialysis"];
+                    $causes = ["Medical Checkup", "Emergency Treatment", "Maternity Care", "Chemotherapy", "Surgery", "Hospitalization", "Laboratory Tests", "Accident Injury", "Dialysis"];
                     foreach($causes as $c): ?>
                         <label class="option-item">
                             <input type="radio" name="medical_cause" value="<?php echo $c; ?>" required> <?php echo $c; ?>
@@ -198,7 +255,7 @@ require_once 'auth.php';?>
                 <div class="form-section-title" style="color: #10b981;">Type of Assistance Requested</div>
                 <div class="analysis-grid" style="background: #f0fdf4; border-color: #10b981;">
                     <?php 
-                    $types = ["Chemotherapy Assistance", "Cash Guarantee", "Surgery Financial Support", "Laboratory Assistance", "Dialysis Assistance", "Medical Cash Aid", "Medicine Assistance", "Hospital Bill Assistance"];
+                    $types = ["Medical Assistance", "Cash Guarantee", "Surgery Financial Support", "Laboratory Assistance", "Dialysis Assistance", "Medicine Assistance", "Hospital Bill Assistance"];
                     foreach($types as $t): ?>
                         <label class="option-item">
                             <input type="radio" name="assistance_type" value="<?php echo $t; ?>" required> <?php echo $t; ?>
@@ -250,9 +307,8 @@ require_once 'auth.php';?>
 </div>
 
 <script>
-    
 document.getElementsByName('dob')[0].addEventListener('change', function() {
-    if(!this.value) return; // Exit if empty
+    if(!this.value) return; 
     
     const dob = new Date(this.value);
     const today = new Date();
@@ -263,7 +319,6 @@ document.getElementsByName('dob')[0].addEventListener('change', function() {
         age--;
     }
     
-    // Set the age value
     const ageField = document.getElementsByName('age')[0];
     if(ageField) {
         ageField.value = age;
@@ -286,7 +341,6 @@ input.addEventListener('input', function() {
         return;
     }
 
-    // Filter and limit to FIRST 5 matches
     const matches = barangays.filter(b => b.toLowerCase().includes(val)).slice(0, 5);
 
     if (matches.length > 0) {
@@ -310,7 +364,6 @@ input.addEventListener('input', function() {
     }
 });
 
-// Hide box if user clicks outside
 document.addEventListener('click', (e) => {
     if (e.target !== input) suggestionBox.style.display = 'none';
 });

@@ -21,13 +21,97 @@ $db   = 'aics_dss';
 
 $conn = new mysqli($host, $user, $pass, $db);
 
-
-
 if ($conn->connect_error) {
     die("<div style='color:red; padding:20px; background:#fee2e2;'>Database Connection Error: " . $conn->connect_error . "</div>");
 }
 
-// --- ACTION HANDLER ---
+// --- ACTIVE FILTERS RESOLUTION ---
+$search = isset($_GET['search']) ? $conn->real_escape_string($_GET['search']) : '';
+$cause_filter = isset($_GET['cause']) ? $conn->real_escape_string($_GET['cause']) : '';
+$type_filter = isset($_GET['type_filter']) ? $conn->real_escape_string($_GET['type_filter']) : '';
+$status_filter = isset($_GET['status_filter']) ? $conn->real_escape_string($_GET['status_filter']) : '';
+$start_date = isset($_GET['start']) ? $conn->real_escape_string($_GET['start']) : '';
+$end_date = isset($_GET['end']) ? $conn->real_escape_string($_GET['end']) : '';
+
+// Build reusable validation condition mapping strings
+$where_clauses = ["1=1"];
+$is_duplicate_view = (isset($_GET['action']) && $_GET['action'] === 'find_duplicates');
+
+if ($is_duplicate_view) {
+    $where_clauses[] = "CONCAT(fname, lname, birth_date) IN (
+        SELECT CONCAT(fname, lname, birth_date) 
+        FROM aics_sample_data 
+        GROUP BY fname, lname, birth_date 
+        HAVING COUNT(*) > 1
+    )";
+    $sort_logic = "lname ASC, fname ASC, request_date DESC";
+} else {
+    $sort_logic = "request_date DESC, id DESC";
+}
+
+if (!empty($search)) $where_clauses[] = "(medical_cause LIKE '%$search%' OR assistance_type LIKE '%$search%' OR fname LIKE '%$search%' OR lname LIKE '%$search%')";
+if (!empty($cause_filter)) $where_clauses[] = "medical_cause = '$cause_filter'";
+if (!empty($type_filter)) $where_clauses[] = "assistance_type = '$type_filter'";
+if (!empty($status_filter)) $where_clauses[] = "status = '$status_filter'";
+if (!empty($start_date)) $where_clauses[] = "request_date >= '$start_date'";
+if (!empty($end_date)) $where_clauses[] = "request_date <= '$end_date'";
+
+$where_str = implode(" AND ", $where_clauses);
+
+// --- NATIVE EXCEL STREAM EXPORT INTERCEPTOR ---
+if (isset($_GET['action']) && $_GET['action'] === 'export_excel') {
+    $filename = "AICS_Beneficiary_Export_" . date('Ymd_His') . ".xls";
+    
+    // Send standard download headers
+    header("Content-Type: application/vnd.ms-excel; charset=utf-8");
+    header("Content-Disposition: attachment; filename=\"$filename\"");
+    header("Pragma: no-cache");
+    header("Expires: 0");
+
+    // Print headers using table layout structure native to Excel mapping engines
+    echo "<table border='1'>";
+    echo "<tr style='background-color:#2c3e50; color:white; font-weight:bold;'>";
+    echo "<th>Date</th>";
+    echo "<th>Barangay</th>";
+    echo "<th>Sex</th>";
+    echo "<th>Civil Status</th>";
+    echo "<th>Age</th>";
+    echo "<th>Type of Assistance</th>";
+    echo "<th>Client Category</th>";
+    echo "<th>Sub Category</th>";
+    echo "</tr>";
+
+    // Run custom comprehensive filter dump query
+    $export_sql = "SELECT request_date, barangay, sex, civil_status, birth_date, assistance_type, client_category, client_subcategory FROM aics_sample_data WHERE $where_str ORDER BY $sort_logic";
+    $export_res = $conn->query($export_sql);
+
+    if ($export_res && $export_res->num_rows > 0) {
+        while ($row = $export_res->fetch_assoc()) {
+            // Dynamic context safe calculation of structural age properties
+            $age = 'N/A';
+            if (!empty($row['birth_date']) && $row['birth_date'] != '0000-00-00') {
+                $bday = new DateTime($row['birth_date']);
+                $context_date = new DateTime($row['request_date']);
+                $age = $context_date->diff($bday)->y;
+            }
+
+            echo "<tr>";
+            echo "<td>" . htmlspecialchars($row['request_date']) . "</td>";
+            echo "<td>" . htmlspecialchars($row['barangay'] ?? 'N/A') . "</td>";
+            echo "<td>" . htmlspecialchars($row['sex'] ?? 'N/A') . "</td>";
+            echo "<td>" . htmlspecialchars($row['civil_status'] ?? 'N/A') . "</td>";
+            echo "<td>" . $age . "</td>";
+            echo "<td>" . htmlspecialchars($row['assistance_type'] ?? 'N/A') . "</td>";
+            echo "<td>" . htmlspecialchars($row['client_category'] ?? 'N/A') . "</td>";
+            echo "<td>" . htmlspecialchars($row['client_subcategory'] ?? 'N/A') . "</td>";
+            echo "</tr>";
+        }
+    }
+    echo "</table>";
+    exit();
+}
+
+// --- STANDARD SCRIPTS HANDLER ACTIONS ---
 
 function logChange($conn, $record_id, $column, $old_val, $new_val) {
     if ($old_val != $new_val) {
@@ -49,20 +133,15 @@ function verifyAdminAuth($password, $conn) {
 
 // Handle Update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_record'])) {
-    // ... (Keep your Admin/Staff auth checks here) ...
-
     $id = (int)$_POST['edit_id'];
     $status = $conn->real_escape_string($_POST['status']);
-    $remarks = $conn->real_escape_string($_POST['remarks']); // Add this line
+    $remarks = $conn->real_escape_string($_POST['remarks']); 
 
-    // Fetch old data for audit logs
     $res = $conn->query("SELECT status, remarks FROM aics_sample_data WHERE id = $id");
     $old = $res->fetch_assoc();
 
-    // UPDATE THE QUERY TO INCLUDE REMARKS
     $conn->query("UPDATE aics_sample_data SET status='$status', remarks='$remarks' WHERE id=$id");
 
-    // Log the changes
     logChange($conn, $id, 'status', $old['status'], $status);
     logChange($conn, $id, 'remarks', $old['remarks'], $remarks);
 
@@ -96,18 +175,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'approve' && isset($_GET['id']
     exit();
 }
 
-// 2. Pagination & Filter Parameters
+// 2. Pagination Configuration
 $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 20; 
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 if ($page < 1) $page = 1;
 $offset = ($page - 1) * $limit;
-
-$search = isset($_GET['search']) ? $conn->real_escape_string($_GET['search']) : '';
-$cause_filter = isset($_GET['cause']) ? $conn->real_escape_string($_GET['cause']) : '';
-$type_filter = isset($_GET['type_filter']) ? $conn->real_escape_string($_GET['type_filter']) : '';
-$status_filter = isset($_GET['status_filter']) ? $conn->real_escape_string($_GET['status_filter']) : '';
-$start_date = isset($_GET['start']) ? $conn->real_escape_string($_GET['start']) : '';
-$end_date = isset($_GET['end']) ? $conn->real_escape_string($_GET['end']) : '';
 
 // 3. FETCH UNIQUE DROPDOWN VALUES
 $unique_causes = [];
@@ -117,38 +189,6 @@ while($r = $res_c->fetch_assoc()) $unique_causes[] = $r['medical_cause'];
 $unique_types = [];
 $res_t = $conn->query("SELECT DISTINCT assistance_type FROM aics_sample_data WHERE assistance_type != '' ORDER BY assistance_type ASC");
 while($r = $res_t->fetch_assoc()) $unique_types[] = $r['assistance_type'];
-
-// --- HEATMAP LOCATION DATA ---
-$location_data = [];
-$l_res = $conn->query("SELECT barangay, COUNT(*) as count FROM aics_sample_data WHERE barangay IS NOT NULL AND barangay != '' GROUP BY barangay ORDER BY count DESC LIMIT 8");
-while($l_row = $l_res->fetch_assoc()) { $location_data[] = $l_row; }
-$loc_labels = json_encode(array_column($location_data, 'barangay'));
-$loc_counts = json_encode(array_column($location_data, 'count'));
-
-// 4. Build Query
-$where_clauses = ["1=1"];
-$is_duplicate_view = (isset($_GET['action']) && $_GET['action'] === 'find_duplicates');
-
-if ($is_duplicate_view) {
-    $where_clauses[] = "CONCAT(fname, lname, birth_date) IN (
-        SELECT CONCAT(fname, lname, birth_date) 
-        FROM aics_sample_data 
-        GROUP BY fname, lname, birth_date 
-        HAVING COUNT(*) > 1
-    )";
-    $sort_logic = "lname ASC, fname ASC, request_date DESC";
-} else {
-    $sort_logic = "request_date DESC, id DESC";
-}
-
-if (!empty($search)) $where_clauses[] = "(medical_cause LIKE '%$search%' OR assistance_type LIKE '%$search%' OR fname LIKE '%$search%' OR lname LIKE '%$search%')";
-if (!empty($cause_filter)) $where_clauses[] = "medical_cause = '$cause_filter'";
-if (!empty($type_filter)) $where_clauses[] = "assistance_type = '$type_filter'";
-if (!empty($status_filter)) $where_clauses[] = "status = '$status_filter'";
-if (!empty($start_date)) $where_clauses[] = "request_date >= '$start_date'";
-if (!empty($end_date)) $where_clauses[] = "request_date <= '$end_date'";
-
-$where_str = implode(" AND ", $where_clauses);
 
 $total_res = $conn->query("SELECT COUNT(*) as total FROM aics_sample_data WHERE $where_str");
 $total_records = $total_res->fetch_assoc()['total'];
@@ -163,7 +203,6 @@ $sql = "SELECT id, id_number, request_date, medical_cause, assistance_type, stat
 $result = $conn->query($sql);
 
 if (!$result) {
-    // If this triggers, your database column names probably don't match the query
     die("<div style='background:#fee2e2; color:#b91c1c; padding:20px; border-radius:8px; margin:20px;'>
             <strong>Database Query Error:</strong> " . $conn->error . "<br>
             <em>Check if columns like 'remarks' or 'id_number' actually exist in your table.</em>
@@ -175,16 +214,6 @@ if ($result->num_rows > 0) {
     while($row = $result->fetch_assoc()) { 
         $all_records[] = $row; 
     }
-} else {
-    // 4. Debug: If table is empty, check if ANY data exists at all
-    $check_total = $conn->query("SELECT COUNT(*) as total FROM aics_sample_data");
-    $total_in_db = $check_total->fetch_assoc()['total'];
-    
-    if ($total_in_db > 0) {
-        $debug_msg = "The database has $total_in_db records, but your current filters are hiding them.";
-    } else {
-        $debug_msg = "The database table 'aics_sample_data' is currently empty.";
-    }
 }
 
 function getPaginationUrl($p, $l = null) {
@@ -193,6 +222,9 @@ function getPaginationUrl($p, $l = null) {
     if($l) $params['limit'] = $l;
     return "?" . http_build_query($params);
 }
+
+// Generate separate dynamic parameter payload for preserving configurations during excel processing
+$excel_url = "records.php?" . http_build_query(array_merge($_GET, ['action' => 'export_excel']));
 ?>
 
 <!DOCTYPE html>
@@ -234,15 +266,15 @@ function getPaginationUrl($p, $l = null) {
         .status-paid { background: #dbeafe; color: #2563eb; }
         .status-waitlisted { background: #f3e8ff; color: #9333ea; }
         .status-declined { background: #fee2e2; color: #dc2626; }
-        .btn-print { padding: 10px 20px; background: #0f172a; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 8px; transition: 0.2s; }
-        .btn-duplicate { padding: 10px 20px; background: #f59e0b; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; text-decoration:none; display: flex; align-items: center; gap: 8px; transition: 0.2s; }
+        .btn-excel { padding: 10px 20px; background: #0f172a; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; text-decoration: none; display: flex; align-items: center; gap: 8px; transition: 0.2s; }
+        .btn-duplicate { padding: 10px 20px; background: #0f172a; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; text-decoration:none; display: flex; align-items: center; gap: 8px; transition: 0.2s; }
         .btn-recent { padding: 10px 20px; background: #f8fafc; color: #1e293b; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer; font-weight: 600; text-decoration: none; display: flex; align-items: center; gap: 8px; transition: 0.2s; }
         .action-btn { padding: 6px; border-radius: 4px; border: 1px solid #e2e8f0; color: #64748b; transition: 0.2s; cursor: pointer; text-decoration: none; font-size: 12px; margin-right: 5px; background: #fff; }
         .btn-edit { color: #3b82f6; } .btn-edit:hover { background: #eff6ff; }
         .btn-delete { color: #ef4444; } .btn-delete:hover { background: #fef2f2; }
         .btn-approve { color: #10b981; } .btn-approve:hover { background: #f0fdf4; }
         .btn-view { color: #6366f1; } .btn-view:hover { background: #eef2ff; }
-        .total-counter-box { background: #fff; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 15px; }
+        .total-counter-box { background: #fff; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 15px; width: 320px; }
         .counter-icon { width: 45px; height: 45px; background: #eff6ff; color: #3b82f6; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
         .pagination-footer { padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-top: 1px solid #e2e8f0; }
         .pagination-btns { display: flex; gap: 4px; }
@@ -255,7 +287,7 @@ function getPaginationUrl($p, $l = null) {
         .toast-msg { position: fixed; top: 20px; right: 20px; background: #10b981; color: white; padding: 15px 25px; border-radius: 8px; z-index: 10000; font-weight: 600; }
         .close { position: absolute; right: 20px; top: 15px; font-size: 24px; cursor: pointer; color: #94a3b8; }
         @media print {
-            .sidebar, .btn-print, .btn-duplicate, .btn-recent, .filter-header, .pagination-footer, .no-print, .toast-msg, .heatmap-container { display: none !important; }
+            .sidebar, .btn-print, .btn-excel, .btn-duplicate, .btn-recent, .filter-header, .pagination-footer, .no-print, .toast-msg { display: none !important; }
             body { background: white; color: black; }
             .main { margin-left: 0 !important; padding: 0 !important; width: 100% !important; }
             .table-container { box-shadow: none !important; border: 1px solid #ccc !important; }
@@ -290,33 +322,26 @@ function getPaginationUrl($p, $l = null) {
                 <h1 style="margin:0; color:var(--dswd-dark); font-size: 28px;">Beneficiary Records</h1>
                 <p style="color:#64748b; margin-top: 5px;">Historical database of AICS interventions</p>
             </div>
-            <div style="display: flex; gap: 10px;">
+            
+            <div style="display: flex; gap: 10px; align-items: center;">
                 <a href="records.php?action=find_duplicates" class="btn-duplicate">
                     <i class="fas fa-copy"></i> Find Duplicates
                 </a>
-                <button type="button" onclick="window.print()" class="btn-print">
-                    <i class="fas fa-print"></i> Print Results
-                </button>
+
+                <div style="display: flex; gap: 10px;">
+                    <a href="<?php echo $excel_url; ?>" class="btn-excel">
+                        <i class="fas fa-file-excel"></i> Print Records
+                    </a>
+                </div>
             </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 20px; margin-top: 20px; margin-bottom: 20px;">
+        <div style="margin-top: 20px; margin-bottom: 20px;">
             <div class="total-counter-box">
                 <div class="counter-icon"><i class="fas fa-users"></i></div>
                 <div>
                     <div style="font-size: 12px; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Total Applicants</div>
                     <div style="font-size: 24px; font-weight: 700; color: #1e293b;"><?php echo number_format($total_records); ?></div>
-                </div>
-            </div>
-
-            <div class="heatmap-container" style="background: #fff; padding: 15px 20px; border-radius: 12px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 20px; box-shadow: var(--card-shadow);">
-                <div style="flex: 1;">
-                    <div style="font-size: 11px; color: #94a3b8; text-transform: uppercase; font-weight: 700; margin-bottom: 5px;">Demand Heatmap (by Barangay)</div>
-                    <div style="height: 60px;"><canvas id="locationChart"></canvas></div>
-                </div>
-                <div id="top-barangay" style="text-align: right; border-left: 1px solid #f1f5f9; padding-left: 20px;">
-                    <div style="font-size: 10px; color: #ef4444; font-weight: 700;">HIGHEST DEMAND</div>
-                    <div style="font-size: 16px; font-weight: 700; color: #1e293b;"><?php echo $location_data[0]['barangay'] ?? 'N/A'; ?></div>
                 </div>
             </div>
         </div>
@@ -338,6 +363,15 @@ function getPaginationUrl($p, $l = null) {
                         <?php endforeach; ?>
                     </select>
 
+                    <select name="type_filter" class="input-field filter-select" onchange="this.form.submit()">
+                        <option value="">All Assistance Types</option>
+                        <?php foreach($unique_types as $type): ?>
+                            <option value="<?php echo htmlspecialchars($type); ?>" <?php if($type_filter == $type) echo 'selected'; ?>>
+                                <?php echo htmlspecialchars($type); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+
                     <select name="status_filter" class="input-field filter-select" onchange="this.form.submit()">
                         <option value="">All Statuses</option>
                         <?php 
@@ -346,6 +380,12 @@ function getPaginationUrl($p, $l = null) {
                             <option value="<?php echo $s; ?>" <?php if($status_filter == $s) echo 'selected'; ?>><?php echo $s; ?></option>
                         <?php endforeach; ?>
                     </select>
+
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="date" name="start" class="input-field" value="<?php echo htmlspecialchars($start_date); ?>" onchange="this.form.submit()" title="Start Date">
+                        <span style="font-size: 12px; color: #64748b; font-weight: 600;">to</span>
+                        <input type="date" name="end" class="input-field" value="<?php echo htmlspecialchars($end_date); ?>" onchange="this.form.submit()" title="End Date">
+                    </div>
 
                     <a href="records.php" class="btn-recent">
                         <i class="fas fa-clock"></i> Recent
@@ -550,33 +590,6 @@ function getPaginationUrl($p, $l = null) {
 </div>
 
 <script>
-// Chart Logic
-const locCtx = document.getElementById('locationChart').getContext('2d');
-new Chart(locCtx, {
-    type: 'bar',
-    data: {
-        labels: <?php echo $loc_labels; ?>,
-        datasets: [{
-            label: 'Requests',
-            data: <?php echo $loc_counts; ?>,
-            backgroundColor: 'rgba(239, 68, 68, 0.6)',
-            borderColor: '#ef4444',
-            borderWidth: 1,
-            borderRadius: 4
-        }]
-    },
-    options: {
-        indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { 
-            x: { display: false },
-            y: { ticks: { font: { size: 9 } } }
-        }
-    }
-});
-
 // View Full Info Logic
 function openViewModal(id) {
     document.getElementById('viewModal').style.display = 'block';
@@ -593,85 +606,61 @@ function openViewModal(id) {
     });
 }
 
-function closeViewModal() { document.getElementById('viewModal').style.display = 'none'; }
-
-// View History Logic
-function viewHistory(id) {
-    document.getElementById('historyRecordId').innerText = id;
-    document.getElementById('historyModal').style.display = 'block';
-    document.getElementById('historyContent').innerHTML = '<p style="text-align:center; padding:20px;">Fetching records...</p>';
-
-    fetch('fetch_history.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'id=' + id
-    })
-    .then(response => response.text())
-    .then(data => {
-        document.getElementById('historyContent').innerHTML = data;
-    });
+function closeViewModal() {
+    document.getElementById('viewModal').style.display = 'none';
 }
 
-function closeModal() {
-    const modal = document.getElementById('editModal');
-    if (modal) {
-        modal.style.display = 'none';
-    }
-}
-
-function openDeleteModal(id) {
-    const idInput = document.getElementById('d_id');
-    if (idInput) {
-        idInput.value = id;
-    }
-    const modal = document.getElementById('deleteModal');
-    if (modal) {
-        modal.style.display = 'block';
-    }
-}
-
-function closeDeleteModal() {
-    document.getElementById('deleteModal').style.display = 'none';
-}
-
-// Edit Modal Logic
-function openModal(id, cause, type, status, date, name, brgy, bdate, idNum, remarks = '') {
-    const modal = document.getElementById('editModal');
-    if (!modal) return;
-
-    // Fill Hidden and Standard inputs
+function openModal(id, cause, type, status, rdate, name, brgy, bdate, idNum, remarks) {
     document.getElementById('m_id').value = id;
+    document.getElementById('read_id').value = idNum;
+    document.getElementById('read_brgy').value = brgy;
+    document.getElementById('read_rdate').value = rdate;
+    document.getElementById('read_name').value = name;
     document.getElementById('m_cause').value = cause;
     document.getElementById('m_type').value = type;
     document.getElementById('m_status').value = status;
-    
-    // Fill Read-only Profile Info
-    document.getElementById('read_id').value = idNum;
-    document.getElementById('read_name').value = name;
-    document.getElementById('read_brgy').value = brgy;
-    document.getElementById('read_rdate').value = date;
-
-    // Fill Remarks Textarea
-    if(document.getElementById('m_remarks')) {
-        document.getElementById('m_remarks').value = remarks;
-    }
-
-    modal.style.display = 'block';
+    document.getElementById('m_remarks').value = remarks;
+    document.getElementById('editModal').style.display = 'block';
 }
 
 function closeModal() {
     document.getElementById('editModal').style.display = 'none';
 }
 
-function closeHistoryModal() { document.getElementById('historyModal').style.display = 'none'; }
+function viewHistory(id) {
+    document.getElementById('historyRecordId').innerText = id;
+    document.getElementById('historyModal').style.display = 'block';
+    document.getElementById('historyContent').innerHTML = '<p>Loading history...</p>';
+    
+    fetch('fetch_history.php?id=' + id)
+        .then(response => response.text())
+        .then(data => {
+            document.getElementById('historyContent').innerHTML = data;
+        });
+}
 
-function closeDeleteModal() { document.getElementById('deleteModal').style.display = 'none'; }
+function closeHistoryModal() {
+    document.getElementById('historyModal').style.display = 'none';
+}
+
+function openDeleteModal(id) {
+    document.getElementById('d_id').value = id;
+    document.getElementById('deleteModal').style.display = 'block';
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteModal').style.display = 'none';
+}
 
 window.onclick = function(event) {
-    if (event.target == document.getElementById('historyModal')) { closeHistoryModal(); }
-    if (event.target == document.getElementById('editModal')) { closeModal(); }
-    if (event.target == document.getElementById('deleteModal')) { closeDeleteModal(); }
-    if (event.target == document.getElementById('viewModal')) { closeViewModal(); }
+    let editM = document.getElementById('editModal');
+    let viewM = document.getElementById('viewModal');
+    let histM = document.getElementById('historyModal');
+    let delM = document.getElementById('deleteModal');
+    if (event.target == editM) editM.style.display = "none";
+    if (event.target == viewM) viewM.style.display = "none";
+    if (event.target == histM) histM.style.display = "none";
+    if (event.target == delM) delM.style.display = "none";
 }
 </script>
 </body>

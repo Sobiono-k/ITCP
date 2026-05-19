@@ -2,7 +2,6 @@
 session_start();
 
 // 1. Establish Database Connection
-// Replace these with your actual database credentials
 $servername = "localhost";
 $username_db = "root";
 $password_db = "";
@@ -28,9 +27,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $row = $result->fetch_assoc();
         
         // 3. SET THE SESSION DATA
-        // This is the critical part that the Sidebar reads
         $_SESSION['user_id'] = $row['id'];
-        $_SESSION['role'] = $row['role']; // MUST be 'Admin' or 'Staff' in your database
+        $_SESSION['role'] = $row['role']; 
+
+        // --- REMEMBER ME COOKIE LOGIC ---
+        if (isset($_POST['remember'])) {
+            // Store the username in a cookie that lasts for 30 days
+            // 86400 seconds = 1 day * 30 days
+            setcookie("remember_user", $user, time() + (86400 * 30), "/"); 
+        } else {
+            // If the box was NOT checked, clear the cookie immediately by expiring it in the past
+            setcookie("remember_user", "", time() - 3600, "/");
+        }
+        // ---------------------------------
 
         // 4. Redirect based on role
         if ($_SESSION['role'] === 'Admin') {

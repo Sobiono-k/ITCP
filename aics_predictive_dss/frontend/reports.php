@@ -1,7 +1,5 @@
 <?php
-// reports.php
-
-session_start(); 
+session_start();
 
 // Security Check
 if (!isset($_SESSION['role'])) {
@@ -12,31 +10,46 @@ if (!isset($_SESSION['role'])) {
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-// 1. Database Connection
+// =========================
+// DB CONNECTION
+// =========================
 $host = 'localhost';
 $user = 'root';
 $pass = '';
-$db   = 'aics_dss'; 
+$db   = 'aics_dss';
+
 $conn = new mysqli($host, $user, $pass, $db);
 
 if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
-// 2. Handle Budget Pool Input
+// =========================
+// BUDGET POOL
+// =========================
 $totalBudgetPool = isset($_GET['pool']) ? (float)$_GET['pool'] : 1000000;
 
-// 3. Get Total Requests
+// =========================
+// TOTAL REQUESTS
+// =========================
 $totalRes = $conn->query("SELECT COUNT(*) as total FROM aics_sample_data");
 $totalRequests = $totalRes->fetch_assoc()['total'] ?? 0;
 
-// 4. Fetch Assistance Type Allocations
+// =========================
+// ALLOCATIONS
+// =========================
 $allocations = [];
+
 if ($totalRequests > 0) {
-    $typeQuery = "SELECT assistance_type, COUNT(*) as count FROM aics_sample_data GROUP BY assistance_type";
+    $typeQuery = "SELECT assistance_type, COUNT(*) as count 
+                  FROM aics_sample_data 
+                  GROUP BY assistance_type";
+
     $typeRes = $conn->query($typeQuery);
-    while($row = $typeRes->fetch_assoc()){
-        $percent = ($row['count'] / $totalRequests);
+
+    while ($row = $typeRes->fetch_assoc()) {
+        $percent = $row['count'] / $totalRequests;
+
         $allocations[] = [
             'type' => $row['assistance_type'],
             'percent' => round($percent * 100, 1),
@@ -45,19 +58,32 @@ if ($totalRequests > 0) {
     }
 }
 
-// 5. Fetch Medical Cause Distribution
+// =========================
+// MEDICAL CAUSES
+// =========================
 $medicalCauses = [];
-$causeQuery = "SELECT medical_cause, COUNT(*) as count FROM aics_sample_data WHERE medical_cause != '' GROUP BY medical_cause ORDER BY count DESC LIMIT 10";
+
+$causeQuery = "SELECT medical_cause, COUNT(*) as count 
+               FROM aics_sample_data 
+               WHERE medical_cause != '' 
+               GROUP BY medical_cause 
+               ORDER BY count DESC 
+               LIMIT 10";
+
 $causeRes = $conn->query($causeQuery);
-while($row = $causeRes->fetch_assoc()){
+
+while ($row = $causeRes->fetch_assoc()) {
     $medicalCauses[] = $row;
 }
 
-// 6. Prepare Data for JavaScript Charts
-$chartLabels = json_encode(array_column($allocations, 'type'));
-$chartData = json_encode(array_column($allocations, 'percent'));
-$medicalLabels = json_encode(array_column($medicalCauses, 'medical_cause'));
-$medicalCounts = json_encode(array_column($medicalCauses, 'count'));
+// =========================
+// SAFE JSON ENCODING
+// =========================
+$chartLabels = json_encode(array_column($allocations, 'type') ?: []);
+$chartData = json_encode(array_column($allocations, 'percent') ?: []);
+
+$medicalLabels = json_encode(array_column($medicalCauses, 'medical_cause') ?: []);
+$medicalCounts = json_encode(array_column($medicalCauses, 'count') ?: []);
 
 $conn->close();
 ?>
@@ -96,6 +122,20 @@ $conn->close();
         .header-area { margin-bottom: 30px; border-bottom: 2px solid var(--dswd-blue); padding-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
         .header-text h4 { font-size: 12px; text-transform: uppercase; color: #64748b; letter-spacing: 1px; }
         .header-text h1 { margin: 5px 0; font-size: 24px; color: var(--dswd-dark); font-weight: 800; }
+
+        .section-box {
+            border-left: 4px solid #0038a8;
+            transition: all 0.3s ease;
+        }
+
+        .section-box:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+        }
+
+        canvas {
+            transition: all 0.3s ease;
+        }
         
         .report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 30px; }
         .report-card { background: #fff; padding: 25px; border-radius: 12px; box-shadow: var(--card-shadow); cursor: pointer; transition: 0.3s; border: 1px solid transparent; display: flex; align-items: center; gap: 20px; }
@@ -231,57 +271,154 @@ $conn->close();
 </div>
 
 <script>
-// --- Chart JS Configurations ---
-const ctxBudget = document.getElementById('budgetChart').getContext('2d');
-new Chart(ctxBudget, {
-    type: 'doughnut',
-    data: {
-        labels: <?php echo $chartLabels; ?>,
-        datasets: [{
-            data: <?php echo $chartData; ?>,
-            backgroundColor: ['#0038a8', '#ce1126', '#f59e0b', '#10b981', '#8b5cf6', '#64748b'],
-            borderWidth: 0
-        }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false, // Prevents the 19000px height bug
-        plugins: { 
-            legend: { 
-                position: 'bottom', 
-                labels: { boxWidth: 12, font: { size: 11 } } 
-            } 
-        }
-    }
-});
+const budgetLabels = <?php echo $chartLabels ?: '[]'; ?>;
+const budgetData = <?php echo $chartData ?: '[]'; ?>;
 
-const ctxCause = document.getElementById('causeChart').getContext('2d');
-new Chart(ctxCause, {
-    type: 'bar',
-    data: {
-        labels: <?php echo $medicalLabels; ?>,
-        datasets: [{
-            label: 'Cases',
-            data: <?php echo $medicalCounts; ?>,
-            backgroundColor: '#ce1126',
-            borderRadius: 4,
-        }]
-    },
-    options: {
-        indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false, // Prevents the 19000px height bug
-        scales: { 
-            x: { grid: { display: false } }, 
-            y: { grid: { display: false } } 
+const causeLabels = <?php echo $medicalLabels ?: '[]'; ?>;
+const causeData = <?php echo $medicalCounts ?: '[]'; ?>;
+
+
+// =========================
+// GOV STYLE ANIMATION SETTINGS
+// =========================
+const animationConfig = {
+    duration: 1800,
+    easing: 'easeOutQuart'
+};
+
+
+// =========================
+// BUDGET (DOUGHNUT - GOV STYLE)
+// =========================
+const budgetCanvas = document.getElementById('budgetChart');
+
+if (budgetCanvas && budgetLabels.length > 0) {
+    new Chart(budgetCanvas.getContext('2d'), {
+        type: 'doughnut',
+        data: {
+            labels: budgetLabels,
+            datasets: [{
+                data: budgetData,
+                backgroundColor: [
+                    '#0038a8', // gov blue
+                    '#ce1126', // gov red
+                    '#f59e0b', // amber
+                    '#10b981', // green
+                    '#6366f1', // indigo
+                    '#64748b'  // gray
+                ],
+                borderWidth: 2,
+                borderColor: '#ffffff',
+                hoverOffset: 10
+            }]
         },
-        plugins: { legend: { display: false } }
-    }
-});
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
 
-function showSection(type) {
-    document.getElementById('budgetSection').style.display = (type === 'budget') ? 'block' : 'none';
+            animation: {
+                animateRotate: true,
+                animateScale: true,
+                duration: animationConfig.duration,
+                easing: animationConfig.easing
+            },
+
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        font: {
+                            size: 11,
+                            weight: '600'
+                        },
+                        color: '#334155'
+                    }
+                }
+            },
+
+            cutout: '60%'
+        }
+    });
 }
+
+
+// =========================
+// MEDICAL CAUSE (GOV BAR CHART)
+// =========================
+const causeCanvas = document.getElementById('causeChart');
+
+if (causeCanvas && causeLabels.length > 0) {
+    new Chart(causeCanvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: causeLabels,
+            datasets: [{
+                label: 'Cases Reported',
+                data: causeData,
+                backgroundColor: '#0038a8',
+                borderRadius: 6,
+                borderSkipped: false,
+                barThickness: 18
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+
+            animation: {
+                duration: 2000,
+                easing: 'easeOutQuart'
+            },
+
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: '#0f172a',
+                    titleFont: { size: 13 },
+                    bodyFont: { size: 12 }
+                }
+            },
+
+            scales: {
+                x: {
+                    grid: {
+                        color: '#e2e8f0'
+                    },
+                    ticks: {
+                        precision: 0
+                    }
+                },
+                y: {
+                    grid: {
+                        display: false
+                    }
+                }
+            }
+        }
+    });
+}
+
+
+// =========================
+// PAGE LOAD ANIMATION (GOV STYLE FADE-IN)
+// =========================
+window.addEventListener("load", () => {
+    const sections = document.querySelectorAll('.section-box');
+
+    sections.forEach((el, index) => {
+        el.style.opacity = 0;
+        el.style.transform = "translateY(20px)";
+
+        setTimeout(() => {
+            el.style.transition = "all 0.6s ease";
+            el.style.opacity = 1;
+            el.style.transform = "translateY(0)";
+        }, 200 * index);
+    });
+});
 </script>
 
 </body>

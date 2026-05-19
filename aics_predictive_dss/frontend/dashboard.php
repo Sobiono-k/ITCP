@@ -52,7 +52,10 @@ if (!$rf_results || !is_array($rf_results)) {
 // 2. SQL DATA RETRIEVAL (Intelligent Column Mapping)
 $recent_records = [];
 $top_3_causes = [];
+$top_3_barangays = [];
 $total_requests = 0;
+$pending_count = 0;
+$approved_count = 0;
 
 // Detect columns dynamically to prevent "Unknown Column" errors
 $columns_res = $conn->query("SHOW COLUMNS FROM aics_sample_data");
@@ -67,13 +70,24 @@ if ($columns_res) {
 $date_col   = in_array('request_date', $cols) ? 'request_date' : ($cols[0] ?? 'COL 1');
 $cause_col  = in_array('medical_cause', $cols) ? 'medical_cause' : ($cols[1] ?? 'COL 2');
 $type_col   = in_array('assistance_type', $cols) ? 'assistance_type' : ($cols[2] ?? 'COL 3');
-$amount_col = in_array('amount', $cols) ? 'amount' : 'amount'; // Defaulting to amount if exists
+$status_col = in_array('status', $cols) ? 'status' : 'status'; // Fallback mapping for statuses
 
 // 1. Get Total Count
 $count_res = $conn->query("SELECT COUNT(*) as total FROM aics_sample_data");
 $total_requests = ($count_res) ? $count_res->fetch_assoc()['total'] : 0;
 
-// 2. Get Top 3 Medical Causes
+// 2. Get Workload Volume Breakdown (Pending vs. Approved Cases)
+if (in_array($status_col, $cols)) {
+    $status_distribution_res = $conn->query("SELECT `$status_col` as stat, COUNT(*) as qty FROM aics_sample_data GROUP BY `$status_col`");
+    if ($status_distribution_res) {
+        while ($status_row = $status_distribution_res->fetch_assoc()) {
+            if (strtolower($status_row['stat']) === 'pending') $pending_count = $status_row['qty'];
+            if (strtolower($status_row['stat']) === 'approved') $approved_count = $status_row['qty'];
+        }
+    }
+}
+
+// 3. Get Top 3 Medical Causes
 $cause_query = "SELECT `$cause_col` as cause, COUNT(*) as count 
                 FROM aics_sample_data 
                 GROUP BY `$cause_col` 
@@ -85,10 +99,10 @@ if ($cause_res) {
     }
 }
 
-// 3. Get Recent Records (mapped for JavaScript 'csvData' consistency)
+// 4. Get Recent Records (mapped for JavaScript 'csvData' consistency)
 $table_query = "SELECT `$date_col` as date, 
-                       `$cause_col` as cause, 
-                       `$type_col` as type 
+                        `$cause_col` as cause, 
+                        `$type_col` as type 
                 FROM aics_sample_data 
                 ORDER BY `$date_col` DESC"; // No LIMIT here
 $table_res = $conn->query($table_query);
@@ -104,13 +118,11 @@ if ($table_res) {
 
 $topCause = !empty($top_3_causes) ? array_key_first($top_3_causes) : "No Data";
 
-// 4. Get Geographic Data for Heatmap
+// 5. Get Geographic Data for Heatmap & Fetch Top 3 Barangays
 $location_data = [];
 $loc_col = in_array('barangay', $cols) ? 'barangay' : (in_array('location', $cols) ? 'location' : null);
 
 if ($loc_col) {
-    // This query assumes you might have lat/lng columns. 
-    // If not, we will use a JS mapper for known Quezon City barangays.
     $lat_col = in_array('latitude', $cols) ? 'latitude' : 'null';
     $lng_col = in_array('longitude', $cols) ? 'longitude' : 'null';
     
@@ -118,7 +130,21 @@ if ($loc_col) {
                   FROM aics_sample_data GROUP BY `$loc_col` ORDER BY count DESC";
     $loc_res = $conn->query($loc_query);
     if ($loc_res) {
-        while($row = $loc_res->fetch_assoc()) { $location_data[] = $row; }
+        while($row = $loc_res->fetch_assoc()) { 
+            $location_data[] = $row; 
+        }
+    }
+
+    // Isolate Top 3 Barangays for the new card
+    $brgy_query = "SELECT `$loc_col` as brgy, COUNT(*) as count 
+                   FROM aics_sample_data 
+                   GROUP BY `$loc_col` 
+                   ORDER BY count DESC LIMIT 3";
+    $brgy_res = $conn->query($brgy_query);
+    if ($brgy_res) {
+        while($row = $brgy_res->fetch_assoc()) {
+            $top_3_barangays[$row['brgy']] = $row['count'];
+        }
     }
 }
 
@@ -143,50 +169,47 @@ echo "<script>
     <script src="https://leaflet.github.io/Leaflet.heat/dist/leaflet-heat.js"></script>
     <style>
         * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-}
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-html {
-    /* Prevents "jumping" when a scrollbar appears on longer pages */
-    overflow-y: scroll; 
-}
-        /* ... Your styles stay the same ... */
+        html {
+            overflow-y: scroll; 
+        }
         :root { --dswd-dark: #2c3e50; --sidebar-bg: #1e293b; --bg-color: #f8fafc; --card-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); --sidebar-width: 260px; }
         body { font-family: 'Inter', sans-serif; margin: 0; background: var(--bg-color); display: flex; color: #334155; }
         .sidebar { width: var(--sidebar-width); height: 100vh; background: var(--sidebar-bg); position: fixed; left: 0; top: 0; color: #fff; display: flex; flex-direction: column; z-index: 1000; }
         .sidebar-header { padding: 30px 20px; text-align: center; background: rgba(0,0,0,0.2); }
         .sidebar a {
-    padding: 15px 25px;
-    text-decoration: none;
-    color: #94a3b8;
-    display: flex;
-    align-items: center;
-    transition: all 0.3s ease;
-    /* FIX: Add this transparent border to reserve the 4px space */
-    border-left: 4px solid transparent; 
-}
+            padding: 15px 25px;
+            text-decoration: none;
+            color: #94a3b8;
+            display: flex;
+            align-items: center;
+            transition: all 0.3s ease;
+            border-left: 4px solid transparent; 
+        }
 
-.sidebar a:hover, .sidebar a.active {
-    background: rgba(255, 255, 255, 0.05);
-    color: #fff;
-    /* Now this just changes the color, not the layout size */
-    border-left: 4px solid #3b82f6; 
-}
+        .sidebar a:hover, .sidebar a.active {
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            border-left: 4px solid #3b82f6; 
+        }
         .main {
-    margin-left: 260px; /* Must match your --sidebar-width */
-    padding: 40px;      /* Ensure this is the same on all pages */
-    width: calc(100% - 260px);
-    min-height: 100vh;
-}
+            margin-left: 260px; 
+            padding: 40px;      
+            width: calc(100% - 260px);
+            min-height: 100vh;
+        }
         .header-area { margin-bottom: 30px; }
         .header-area h1 { margin: 0; font-size: 24px; color: var(--dswd-dark); }
-        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 30px; }
         .card { background: #fff; padding: 24px; border-radius: 12px; box-shadow: var(--card-shadow); border-bottom: 4px solid #e2e8f0; }
         .card.highlight { border-bottom-color: #3b82f6; }
+        .card.warning { border-bottom-color: #8b5cf6; }
         .card h3 { margin: 0; font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
-        .card .value { font-size: 32px; font-weight: 700; color: #1e293b; margin: 10px 0; }
+        .card .value { font-size: 28px; font-weight: 700; color: #1e293b; margin: 10px 0; }
         .card .trend { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 5px; }
         .top-3-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
         .top-3-label { font-size: 13px; font-weight: 600; color: #475569; }
@@ -223,12 +246,17 @@ html {
         <div class="card">
             <h3>Total Requests</h3>
             <div class="value"><?php echo number_format($total_requests); ?></div>
-            <div class="trend" style="color: #10b981;"><i class="fas fa-database"></i> SQL Live Sync</div>
+            <div class="trend" style="color: #10b981;"><i class="fas fa-database"></i>Total Applicant</div>
+        </div>
+        <div class="card warning">
+            <h3>Queue Overview</h3>
+            <div class="value"><?php echo number_format($pending_count); ?> <span style="font-size:14px; color:#64748b; font-weight:400;">Pending</span></div>
+            <div class="trend" style="color: #8b5cf6;"><i class="fas fa-clock"></i> <?php echo number_format($approved_count); ?> Approved Applicant</div>
         </div>
         <div class="card highlight">
             <h3>Predicted Next Period</h3>
             <div class="value" id="kpi-predicted"><?php echo number_format($lstm_val); ?></div>
-            <div class="trend" style="color:#3b82f6;"><i class="fas fa-brain"></i> LSTM Pipeline A</div>
+            <div class="trend" style="color:#3b82f6;"><i class="fas fa-brain"></i>Predicted Applicant</div>
         </div>
         <div class="card">
             <h3>Top Medical Causes</h3>
@@ -241,28 +269,43 @@ html {
                 <?php endforeach; ?>
             </div>
         </div>
+        <div class="card">
+            <h3>Top 3 Barangays</h3>
+            <div style="margin-top: 10px;">
+                <?php if (!empty($top_3_barangays)): ?>
+                    <?php foreach ($top_3_barangays as $brgy_name => $brgy_count): ?>
+                        <div class="top-3-item">
+                            <span class="top-3-label"><?php echo htmlspecialchars($brgy_name ?: 'Unknown'); ?></span>
+                            <span class="top-3-val" style="background: #f0fdf4; color: #16a34a;"><?php echo number_format($brgy_count); ?></span>
+                        </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <div class="top-3-item"><span class="top-3-label">No Data Available</span></div>
+                <?php endif; ?>
+            </div>
+        </div>
     </div>
 
     <div class="grid-container">
-    <div class="section-box">
-        <div class="map-stats">
-            <h2>Geographic Demand Heatmap</h2>
-            <small style="color: #64748b;"><i class="fas fa-map-marker-alt"></i> Quezon City Focus</small>
-        </div>
-        <div id="map"></div>
-        
-        <div style="margin-top: 30px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h2>Request Volume Trend</h2>
-                <div class="chart-controls">
-                    <button id="btn-daily" onclick="changeTimeframe('daily')" class="tgl-btn">Daily</button>
-                    <button id="btn-monthly" onclick="changeTimeframe('monthly')" class="tgl-btn active">Monthly</button>
-                    <button id="btn-yearly" onclick="changeTimeframe('yearly')" class="tgl-btn">Yearly</button>
-                </div>
+        <div class="section-box">
+            <div class="map-stats">
+                <h2>Geographic Demand Heatmap</h2>
+                <small style="color: #64748b;"><i class="fas fa-map-marker-alt"></i> Quezon City Focus</small>
             </div>
-            <canvas id="volumeChart" height="100"></canvas>
+            <div id="map"></div>
+            
+            <div style="margin-top: 30px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2>Request Volume Trend</h2>
+                    <div class="chart-controls">
+                        <button id="btn-daily" onclick="changeTimeframe('daily')" class="tgl-btn">Daily</button>
+                        <button id="btn-monthly" onclick="changeTimeframe('monthly')" class="tgl-btn active">Monthly</button>
+                        <button id="btn-yearly" onclick="changeTimeframe('yearly')" class="tgl-btn">Yearly</button>
+                    </div>
+                </div>
+                <canvas id="volumeChart" height="100"></canvas>
+            </div>
         </div>
-    </div>
 
         <div class="section-box">
             <h2>Decision Insights</h2>
@@ -281,7 +324,7 @@ html {
 
             <div class="insight-pipeline-c" id="pipeline-c-insight">
                 <small style="color:#164e63; font-weight:700; text-transform:uppercase; font-size:10px;">Pipeline C: Strategic Planning</small>
-                <div id="pc-insight-title" style="font-weight:700; color:#164e63; font-size:15px; margin: 5px 0;">Evaluating Budget...</div>
+                <div id="pc-insight-title" style="font-weight:700; color:#164e63; font-size:15px; margin: 5px 0;">Case Load Scaling</div>
                 <p id="pc-insight-desc" style="font-size:12px; color:#155e75; margin:0; line-height:1.4;"></p>
             </div>
 
@@ -312,8 +355,6 @@ html {
 </div>
 
 <script>
-// All your existing JavaScript functions (parseCSVDate, filterTable, changeTimeframe, etc.)
-// are still fully compatible because we exported the SQL data to the variable 'csvData'.
 let volumeChart;
 let currentSurgePercentage = 0; 
 
@@ -323,7 +364,7 @@ function parseCSVDate(dateStr) {
 }
 
 function filterTable() {
-    const display = csvData.slice(0, 8); // SQL already sorted this by DESC
+    const display = csvData.slice(0, 8); 
     const body = document.getElementById('table-body');
     if (!body) return;
     body.innerHTML = display.map(r => {
@@ -344,7 +385,6 @@ function updatePipelineInsights(unit) {
     let timeframeTotal = 0;
     let globalTotal = 0;
     const now = new Date();
-    const avgCostPerRequest = 3500; 
 
     csvData.forEach(row => {
         const rowDate = parseCSVDate(row.date);
@@ -399,10 +439,9 @@ function updatePipelineInsights(unit) {
 
     const pcTitle = document.getElementById('pc-insight-title');
     const pcDesc = document.getElementById('pc-insight-desc');
-    const totalRecommendedBudget = predictedTotal * avgCostPerRequest;
     if (pcTitle && pcDesc) {
-        pcTitle.innerHTML = `<i class="fas fa-coins"></i> Recommended Total Budget`;
-        pcDesc.innerText = `To accommodate the ${predictedTotal} predicted requests, a total allocation of ₱${totalRecommendedBudget.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} is required.`;
+        pcTitle.innerHTML = `<i class="fas fa-users-cog"></i> Recommended Operations Staffing`;
+        pcDesc.innerText = `To smoothly accommodate the predicted ${predictedTotal} intake cases, processing queues should optimize clerical support allocations for ${topCause}.`;
     }
 
     const trendContainer = document.getElementById('rf-trends-container');
@@ -512,95 +551,77 @@ function initHeatmap() {
         attribution: '&copy; OpenStreetMap'
     }).addTo(map);
 
-    // Coordinate Mapping (Fallback if your DB doesn't have Lat/Lng)
     const coordMap = {
-    // District 1 (West Quezon City)
-    "Alicia": [14.6601, 121.0253],
-    "Bagong Pag-asa": [14.6544, 121.0336],
-    "Bahay Toro": [14.6713, 121.0264],
-    "Bungad": [14.6517, 121.0210],
-    "Del Monte": [14.6391, 121.0116],
-    "Laging Handa": [14.6367, 121.0360],
-    "Manresa": [14.6397, 121.0049],
-    "Nayon Kanluran": [14.6473, 121.0216],
-    "Paltok": [14.6394, 121.0179],
-    "Project 6": [14.6631, 121.0374],
-    "San Antonio": [14.6358, 121.0191],
-    "Vasra": [14.6512, 121.0435],
+        "Alicia": [14.6601, 121.0253],
+        "Bagong Pag-asa": [14.6544, 121.0336],
+        "Bahay Toro": [14.6713, 121.0264],
+        "Bungad": [14.6517, 121.0210],
+        "Del Monte": [14.6391, 121.0116],
+        "Laging Handa": [14.6367, 121.0360],
+        "Manresa": [14.6397, 121.0049],
+        "Nayon Kanluran": [14.6473, 121.0216],
+        "Paltok": [14.6394, 121.0179],
+        "Project 6": [14.6631, 121.0374],
+        "San Antonio": [14.6358, 121.0191],
+        "Vasra": [14.6512, 121.0435],
+        "Batasan Hills": [14.6839, 121.0860],
+        "Commonwealth": [14.6826, 121.0608],
+        "Holy Spirit": [14.6845, 121.0710],
+        "Payatas": [14.7136, 121.1064],
+        "Bagong Silangan": [14.7042, 121.1121],
+        "Bagumbayan": [14.6074, 121.0792],
+        "E. Rodriguez": [14.6289, 121.0583],
+        "Libis": [14.6111, 121.0772],
+        "Loyola Heights": [14.6385, 121.0744],
+        "Matandang Balara": [14.6617, 121.0811],
+        "Pansol": [14.6436, 121.0784],
+        "San Roque": [14.6178, 121.0631],
+        "Socorro": [14.6200, 121.0544],
+        "Ugong Norte": [14.5960, 121.0640],
+        "White Plains": [14.6040, 121.0638],
+        "Bagong Lipunan ng Crame": [14.6094, 121.0519],
+        "Don Manuel": [14.6190, 121.0116],
+        "Immaculate Concepcion": [14.6212, 121.0409],
+        "Kamuning": [14.6294, 121.0390],
+        "Kaunlaran": [14.6172, 121.0475],
+        "Kristong Hari": [14.6216, 121.0298],
+        "Obrero": [14.6285, 121.0297],
+        "Pinagkaisahan": [14.6240, 121.0494],
+        "Sacred Heart": [14.6341, 121.0396],
+        "San Martin de Porres": [14.6158, 121.0511],
+        "Tatalon": [14.6213, 121.0189],
+        "U.P. Campus": [14.6549, 121.0652],
+        "U.P. Village": [14.6469, 121.0560],
+        "Fairview": [14.7011, 121.0583],
+        "Greater Lagro": [14.7194, 121.0654],
+        "Pasong Putik": [14.7327, 121.0604],
+        "North Fairview": [14.6994, 121.0519],
+        "Santa Monica": [14.7126, 121.0456],
+        "Gulod": [14.7042, 121.0371],
+        "San Bartolome": [14.6908, 121.0347],
+        "Bagbag": [14.6967, 121.0336],
+        "Nagkaisang Nayon": [14.7176, 121.0315],
+        "Novaliches Proper": [14.7000, 121.0333],
+        "San Agustin": [14.7077, 121.0402],
+        "Tandang Sora": [14.6775, 121.0433],
+        "Pasong Tamo": [14.6732, 121.0610],
+        "Culiat": [14.6644, 121.0515],
+        "Sauyo": [14.6896, 121.0431],
+        "Talipapa": [14.6901, 121.0208],
+        "Baesa": [14.6706, 121.0113],
+        "Sangandaan": [14.6749, 121.0252],
+        "Apolonio Samson": [14.6534, 121.0069],
+        "Unang Sigaw": [14.6538, 121.0016],
+        "Fairview Village": [14.7011, 121.0583],
+        "Project 4": [14.6191, 121.0682],
+        "Project 8": [14.6756, 121.0219]
+    };
 
-    // District 2 (Batasan Area - High Volume)
-    "Batasan Hills": [14.6839, 121.0860],
-    "Commonwealth": [14.6826, 121.0608],
-    "Holy Spirit": [14.6845, 121.0710],
-    "Payatas": [14.7136, 121.1064],
-    "Bagong Silangan": [14.7042, 121.1121],
-
-    // District 3 (Cubao/Anonas Area)
-    "Bagumbayan": [14.6074, 121.0792],
-    "E. Rodriguez": [14.6289, 121.0583],
-    "Libis": [14.6111, 121.0772],
-    "Loyola Heights": [14.6385, 121.0744],
-    "Matandang Balara": [14.6617, 121.0811],
-    "Pansol": [14.6436, 121.0784],
-    "San Roque": [14.6178, 121.0631],
-    "Socorro": [14.6200, 121.0544],
-    "Ugong Norte": [14.5960, 121.0640],
-    "White Plains": [14.6040, 121.0638],
-
-    // District 4 (Central / Diliman Area)
-    "Bagong Lipunan ng Crame": [14.6094, 121.0519],
-    "Don Manuel": [14.6190, 121.0116],
-    "Immaculate Concepcion": [14.6212, 121.0409],
-    "Kamuning": [14.6294, 121.0390],
-    "Kaunlaran": [14.6172, 121.0475],
-    "Kristong Hari": [14.6216, 121.0298],
-    "Obrero": [14.6285, 121.0297],
-    "Pinagkaisahan": [14.6240, 121.0494],
-    "Sacred Heart": [14.6341, 121.0396],
-    "San Martin de Porres": [14.6158, 121.0511],
-    "Tatalon": [14.6213, 121.0189],
-    "U.P. Campus": [14.6549, 121.0652],
-    "U.P. Village": [14.6469, 121.0560],
-
-    // District 5 (Fairview/Novaliches Area)
-    "Fairview": [14.7011, 121.0583],
-    "Greater Lagro": [14.7194, 121.0654],
-    "Pasong Putik": [14.7327, 121.0604],
-    "North Fairview": [14.6994, 121.0519],
-    "Santa Monica": [14.7126, 121.0456],
-    "Gulod": [14.7042, 121.0371],
-    "San Bartolome": [14.6908, 121.0347],
-    "Bagbag": [14.6967, 121.0336],
-    "Nagkaisang Nayon": [14.7176, 121.0315],
-    "Novaliches Proper": [14.7000, 121.0333],
-    "San Agustin": [14.7077, 121.0402],
-
-    // District 6 (Tandang Sora Area)
-    "Tandang Sora": [14.6775, 121.0433],
-    "Pasong Tamo": [14.6732, 121.0610],
-    "Culiat": [14.6644, 121.0515],
-    "Sauyo": [14.6896, 121.0431],
-    "Talipapa": [14.6901, 121.0208],
-    "Baesa": [14.6706, 121.0113],
-    "Sangandaan": [14.6749, 121.0252],
-    "Apolonio Samson": [14.6534, 121.0069],
-    "Unang Sigaw": [14.6538, 121.0016],
-
-    // Common Fallbacks / General Labels
-    "Fairview Village": [14.7011, 121.0583],
-    "Project 4": [14.6191, 121.0682],
-    "Project 8": [14.6756, 121.0219]
-};
-
-
-   const heatPoints = mapData.map(loc => {
+    const heatPoints = mapData.map(loc => {
         const dbName = loc.name ? loc.name.trim() : "";
         const coords = (loc.lat && loc.lng) ? [loc.lat, loc.lng] : coordMap[dbName];
 
         if (coords) {
-            // FORCE LOGIC: 
-            // We want 50 to be the "Peak". 
-            // By dividing by 50 and capping at 1, we ensure the gradient hits 'red'.
             const intensity = Math.min(loc.count / 50, 1); 
             return [...coords, intensity];
         }
@@ -608,16 +629,16 @@ function initHeatmap() {
     }).filter(p => p !== null);
 
     L.heatLayer(heatPoints, {
-        radius: 35,       // INCREASED: Makes the "heat" circle larger and easier to see
-        blur: 20,         // SLIGHTLY HIGHER: Smoothes the edges for a better "glow"
-        max: 1.0,         // CRITICAL: Tells Leaflet that 1.0 (our 50 count) is the MAX heat
-        minOpacity: 0.5,  // ENSURES visibility even for low-count areas
+        radius: 35,       
+        blur: 20,         
+        max: 1.0,         
+        minOpacity: 0.5,  
         gradient: {
             0.4: 'blue', 
             0.6: 'cyan', 
             0.7: 'lime', 
             0.8: 'yellow', 
-            1.0: 'red'    // 1.0 intensity (50 count) will now be 100% Red
+            1.0: 'red'    
         }
     }).addTo(map);
 }
@@ -625,7 +646,7 @@ function initHeatmap() {
 window.onload = () => {
     changeTimeframe('monthly');
     filterTable();
-    initHeatmap(); // Initialize map
+    initHeatmap(); 
 };
 </script>
 </body>

@@ -1,6 +1,15 @@
 <?php 
     $bgPath = '../images/dswdlogo1.jpg';
     $logoPath = '../images/dswdlogo.png'; 
+
+    // Check if the remember_user cookie exists to auto-fill the form
+    $saved_username = "";
+    $is_remembered = false;
+
+    if (isset($_COOKIE['remember_user'])) {
+        $saved_username = htmlspecialchars($_COOKIE['remember_user']);
+        $is_remembered = true;
+    }
 ?>
 
 <!DOCTYPE html>
@@ -41,7 +50,6 @@
         .center-logo {
             max-width: 450px; 
             height: auto;
-            /* Enhanced white shadow for better visibility */
             filter: drop-shadow(0 25px 20px rgb(255, 255, 255));
         }
 
@@ -136,18 +144,18 @@
             <form action="login_action.php" method="POST">
                 <div class="input-box">
                     <i class="fas fa-user"></i>
-                    <input type="text" name="username" placeholder="User Name" required>
+                    <input type="text" name="username" placeholder="User Name" value="<?php echo $saved_username; ?>" required>
                 </div>
 
                 <div class="input-box">
-    <i class="fas fa-lock"></i>
-    <input type="password" name="password" id="passwordField" placeholder="Password" required>
-    <i class="fas fa-eye password-toggle" id="toggleIcon" onclick="togglePassword()" style="cursor: pointer; color: #4285F4;"></i>
-</div>
+                    <i class="fas fa-lock"></i>
+                    <input type="password" name="password" id="passwordField" placeholder="Password" required>
+                    <i class="fas fa-eye password-toggle" id="toggleIcon" onclick="togglePassword()" style="cursor: pointer; color: #4285F4;"></i>
+                </div>
 
                 <div class="options">
                     <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                        <input type="checkbox" name="remember"> Remember me
+                        <input type="checkbox" name="remember" <?php echo $is_remembered ? 'checked' : ''; ?>> Remember me
                     </label>
                 </div>
 
@@ -158,21 +166,19 @@
 
     <script>
         function togglePassword() {
-    const field = document.getElementById('passwordField');
-    const icon = document.getElementById('toggleIcon');
-    
-    if (field.type === "password") {
-        field.type = "text";
-        // Changes icon to eye-slash
-        icon.classList.remove('fa-eye');
-        icon.classList.add('fa-eye-slash');
-    } else {
-        field.type = "password";
-        // Changes icon back to eye
-        icon.classList.remove('fa-eye-slash');
-        icon.classList.add('fa-eye');
-    }
-}
+            const field = document.getElementById('passwordField');
+            const icon = document.getElementById('toggleIcon');
+            
+            if (field.type === "password") {
+                field.type = "text";
+                icon.classList.remove('fa-eye');
+                icon.classList.add('fa-eye-slash');
+            } else {
+                field.type = "password";
+                icon.classList.remove('fa-eye-slash');
+                icon.classList.add('fa-eye');
+            }
+        }
     </script>
 
 </body>
