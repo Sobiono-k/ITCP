@@ -220,7 +220,8 @@ foreach ($top_causes_keys as $index => $c_name) {
                 <?php else: ?>
                     <div class="tag">Analyzing Clusters...</div>
                 <?php endif; ?>
-                <div class="tag"><i class="fas fa-folder"></i> Labhold</div>
+                <div class="tag"><i class="fas fa-folder"></i> Accident Injury
+</div>
             </div>
         </div>
 

@@ -51,8 +51,8 @@ if (!$rf_results || !is_array($rf_results)) {
 
 // 2. SQL DATA RETRIEVAL (Intelligent Column Mapping)
 $recent_records = [];
-$top_3_causes = [];
 $top_3_barangays = [];
+$top_3_assistance = [];
 $total_requests = 0;
 $pending_count = 0;
 $approved_count = 0;
@@ -87,15 +87,15 @@ if (in_array($status_col, $cols)) {
     }
 }
 
-// 3. Get Top 3 Medical Causes
-$cause_query = "SELECT `$cause_col` as cause, COUNT(*) as count 
-                FROM aics_sample_data 
-                GROUP BY `$cause_col` 
-                ORDER BY count DESC LIMIT 3";
-$cause_res = $conn->query($cause_query);
-if ($cause_res) {
-    while($row = $cause_res->fetch_assoc()) {
-        $top_3_causes[$row['cause']] = $row['count'];
+// 3. top_3_assistance
+$type_query = "SELECT `$type_col` as type, COUNT(*) as count 
+               FROM aics_sample_data 
+               GROUP BY `$type_col` 
+               ORDER BY count DESC LIMIT 3";
+$type_res = $conn->query($type_query);
+if ($type_res) {
+    while($row = $type_res->fetch_assoc()) {
+        $top_3_assistance[$row['type']] = $row['count'];
     }
 }
 
@@ -259,16 +259,23 @@ echo "<script>
             <div class="trend" style="color:#3b82f6;"><i class="fas fa-brain"></i>Predicted Applicant</div>
         </div>
         <div class="card">
-            <h3>Top Medical Causes</h3>
-            <div style="margin-top: 10px;" id="top-causes-card-container">
-                <?php foreach ($top_3_causes as $name => $count): ?>
-                    <div class="top-3-item">
-                        <span class="top-3-label"><?php echo htmlspecialchars($name); ?></span>
-                        <span class="top-3-val"><?php echo number_format($count); ?></span>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-        </div>
+    <h3>Top 3 Assistance Types</h3>
+    <div style="margin-top: 10px;">
+        <?php if (!empty($top_3_assistance)): ?>
+            <?php foreach ($top_3_assistance as $type_name => $type_count): ?>
+                <div class="top-3-item">
+                    <span class="top-3-label"><?php echo htmlspecialchars($type_name ?: 'Unknown'); ?></span>
+                    <span class="top-3-val"><?php echo number_format($type_count); ?></span>
+                </div>
+            <?php endforeach; ?>
+        <?php else: ?>
+            <div class="top-3-item"><span class="top-3-label">No Data Available</span></div>
+        <?php endif; ?>
+    </div>
+</div>
+
+
+
         <div class="card">
             <h3>Top 3 Barangays</h3>
             <div style="margin-top: 10px;">
@@ -411,16 +418,6 @@ function updatePipelineInsights(unit) {
     const activeData = timeframeTotal > 0 ? timeframeCauseCounts : globalCauseCounts;
     const activeTotal = timeframeTotal > 0 ? timeframeTotal : globalTotal;
     const sorted = Object.entries(activeData).sort((a, b) => b[1] - a[1]);
-    
-    const topCausesCard = document.getElementById('top-causes-card-container');
-    if (topCausesCard) {
-        topCausesCard.innerHTML = sorted.slice(0, 3).map(([name, count]) => `
-            <div class="top-3-item">
-                <span class="top-3-label">${name}</span>
-                <span class="top-3-val">${count.toLocaleString()}</span>
-            </div>
-        `).join('');
-    }
 
     if (sorted.length === 0) return;
 
@@ -430,20 +427,26 @@ function updatePipelineInsights(unit) {
     const predictedTotal = parseInt(document.getElementById('kpi-predicted').innerText.replace(/,/g, '')) || 0;
     const predictedCauseVolume = Math.round(predictedTotal * demandPercent);
 
+    // Update Pipeline B
     const pbTitle = document.getElementById('pb-insight-title');
     const pbDesc = document.getElementById('pb-insight-desc');
     if (pbTitle && pbDesc) {
         pbTitle.innerHTML = `<i class="fas fa-stethoscope"></i> ${unit.charAt(0).toUpperCase() + unit.slice(1)} Forecast: ${topCause}`;
-        pbDesc.innerText = `Out of the ${predictedTotal} predicted requests, approximately ${predictedCauseVolume} are expected for ${topCause} based on trends.`;
+        pbDesc.innerText = `Out of the ${predictedTotal.toLocaleString()} predicted requests, approx. ${predictedCauseVolume.toLocaleString()} are expected for ${topCause}.`;
     }
 
+    // Update Pipeline C (Budget Planning)
     const pcTitle = document.getElementById('pc-insight-title');
     const pcDesc = document.getElementById('pc-insight-desc');
+    const avgCostPerApplicant = 3500; 
+    const estimatedBudget = predictedTotal * avgCostPerApplicant;
+
     if (pcTitle && pcDesc) {
-        pcTitle.innerHTML = `<i class="fas fa-users-cog"></i> Recommended Operations Staffing`;
-        pcDesc.innerText = `To smoothly accommodate the predicted ${predictedTotal} intake cases, processing queues should optimize clerical support allocations for ${topCause}.`;
+        pcTitle.innerHTML = `<i class="fas fa-wallet"></i> Budget Planning`;
+        pcDesc.innerHTML = `To support the predicted <strong>${predictedTotal.toLocaleString()}</strong> applicants, an allocation of <strong>₱${estimatedBudget.toLocaleString()}</strong> is recommended for the ${unit} period.`;
     }
 
+    // Update Trend Rows
     const trendContainer = document.getElementById('rf-trends-container');
     if (trendContainer) {
         trendContainer.innerHTML = sorted.slice(0, 4).map(([cause, count]) => {
@@ -459,8 +462,6 @@ function updatePipelineInsights(unit) {
         }).join('');
     }
     
-    const liveTopCauseEl = document.getElementById('live-top-cause');
-    if (liveTopCauseEl) liveTopCauseEl.innerText = topCause;
 }
 
 function changeTimeframe(unit) {
