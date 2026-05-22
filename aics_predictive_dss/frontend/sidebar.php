@@ -1,20 +1,29 @@
 <?php
 // sidebar.php
 
-// Start session if not already started
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
 $current_page = basename($_SERVER['PHP_SELF']);
 
-// Check if role exists, otherwise redirect to login or handle as guest
 if (!isset($_SESSION['role'])) {
     header("Location: login.php");
     exit();
 }
 
 $user_role = $_SESSION['role'];
+
+// --- Fetch pending applicant count for the badge ---
+$pending_count = 0;
+
+$host = 'localhost';
+$user = 'root';
+$pass = '';
+$db   = 'aics_dss'; 
+
+$conn = new mysqli($host, $user, $pass, $db);
+
 ?>
 <div class="sidebar">
     <div class="sidebar-header" style="padding: 30px 20px;">
@@ -27,13 +36,37 @@ $user_role = $_SESSION['role'];
     <nav style="display: flex; flex-direction: column; flex-grow: 1; margin-top: 0px;">
         
         <?php if ($user_role === 'Admin'): ?>
-        <a href="dashboard.php" class="<?php echo ($current_page == 'dashboard.php') ? 'active' : ''; ?>">
+        <a href="index.php" class="<?php echo ($current_page == 'index.php') ? 'active' : ''; ?>">
             <i class="fas fa-chart-pie" style="margin-right: 12px; width: 20px;"></i> Dashboard
         </a>
         <?php endif; ?>
 
         <a href="new_applicant.php" class="<?php echo ($current_page == 'new_applicant.php') ? 'active' : ''; ?>">
             <i class="fas fa-user-plus" style="margin-right: 12px; width: 20px;"></i> New Applicant
+        </a>
+
+        <!-- Pending Applicants (Online QR submissions) — visible to both Admin and Staff -->
+        <a href="lookup_applicant.php" class="<?php echo ($current_page == 'lookup_applicant.php') ? 'active' : ''; ?>"
+           style="display: flex; align-items: center; justify-content: space-between;">
+            <span>
+                <i class="fas fa-clock" style="margin-right: 8px; width: 20px;"></i> Pending Applicants
+            </span>
+            <?php if ($pending_count > 0): ?>
+            <span style="
+                background: #ef4444;
+                color: #fff;
+                font-size: 10px;
+                font-weight: 800;
+                min-width: 20px;
+                height: 20px;
+                border-radius: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0 6px;
+                animation: pulse-badge 2s infinite;
+            "><?php echo $pending_count; ?></span>
+            <?php endif; ?>
         </a>
 
         <?php if ($user_role === 'Admin'): ?>
@@ -67,3 +100,10 @@ $user_role = $_SESSION['role'];
         </a>
     </div>
 </div>
+
+<style>
+@keyframes pulse-badge {
+    0%, 100% { transform: scale(1);   opacity: 1; }
+    50%       { transform: scale(1.15); opacity: 0.85; }
+}
+</style>

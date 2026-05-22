@@ -1,7 +1,12 @@
 <?php
 // save_applicant.php
 
-$conn = new mysqli("localhost", "root", "", "aics_dss");
+$host = 'localhost';
+$user = 'root';
+$pass = '';
+$db   = 'aics_dss'; 
+
+$conn = new mysqli($host, $user, $pass, $db);
 
 if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);

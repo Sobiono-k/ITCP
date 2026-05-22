@@ -16,7 +16,7 @@ ini_set('display_errors', 1);
 $host = 'localhost';
 $user = 'root';
 $pass = '';
-$db   = 'aics_dss';
+$db   = 'aics_dss'; 
 
 $conn = new mysqli($host, $user, $pass, $db);
 

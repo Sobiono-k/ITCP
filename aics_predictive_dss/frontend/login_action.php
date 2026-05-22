@@ -2,13 +2,12 @@
 session_start();
 
 // 1. Establish Database Connection
-$servername = "localhost";
-$username_db = "root";
-$password_db = "";
-$dbname = "aics_dss"; 
+$host = 'localhost';
+$user = 'root';
+$pass = '';
+$db   = 'aics_dss'; 
 
-$conn = new mysqli($servername, $username_db, $password_db, $dbname);
-
+$conn = new mysqli($host, $user, $pass, $db);
 if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
@@ -43,7 +42,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         // 4. Redirect based on role
         if ($_SESSION['role'] === 'Admin') {
-            header("Location: dashboard.php");
+            header("Location: index.php");
         } else {
             header("Location: new_applicant.php");
         }

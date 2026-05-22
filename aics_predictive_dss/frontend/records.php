@@ -132,22 +132,8 @@ function verifyAdminAuth($password, $conn) {
 }
 
 // Handle Update
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_record'])) {
-    $id = (int)$_POST['edit_id'];
-    $status = $conn->real_escape_string($_POST['status']);
-    $remarks = $conn->real_escape_string($_POST['remarks']); 
 
-    $res = $conn->query("SELECT status, remarks FROM aics_sample_data WHERE id = $id");
-    $old = $res->fetch_assoc();
 
-    $conn->query("UPDATE aics_sample_data SET status='$status', remarks='$remarks' WHERE id=$id");
-
-    logChange($conn, $id, 'status', $old['status'], $status);
-    logChange($conn, $id, 'remarks', $old['remarks'], $remarks);
-
-    header("Location: records.php?msg=updated");
-    exit();
-}
 
 // Handle Delete
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_record'])) {
@@ -259,6 +245,15 @@ $excel_url = "records.php?" . http_build_query(array_merge($_GET, ['action' => '
         table { width: 100%; border-collapse: collapse; }
         th { text-align: left; padding: 15px 20px; background: #f8fafc; color: #64748b; font-size: 11px; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; }
         td { padding: 16px 20px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+        td.no-print {
+            white-space: nowrap;
+        }
+
+        .action-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
         .badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; background: #eff6ff; color: #1d4ed8; }
         .status-badge { padding: 5px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; display: inline-block; text-transform: uppercase; }
         .status-pending { background: #fef3c7; color: #d97706; }
@@ -424,35 +419,56 @@ $excel_url = "records.php?" . http_build_query(array_merge($_GET, ['action' => '
                         <td style="font-weight:600;"><?php echo htmlspecialchars($row['medical_cause']); ?></td>
                         <td><span class="badge"><?php echo htmlspecialchars($row['assistance_type']); ?></span></td>
                         <td>
-                            <span class="status-badge status-<?php echo strtolower($status); ?>">
-                                <?php echo htmlspecialchars($status); ?>
-                            </span>
-                        </td>
-                        <td style="text-align: center;" class="no-print">
-                            <button type="button" class="action-btn btn-view" title="View Full Info" onclick="openViewModal(<?php echo $row['id']; ?>)">
-                                <i class="fas fa-eye"></i>
-                            </button>
-                            <button type="button" class="action-btn btn-edit" title="Edit Record" 
-    onclick="openModal('<?php echo $row['id']; ?>', 
-                       '<?php echo addslashes($row['medical_cause']); ?>', 
-                       '<?php echo addslashes($row['assistance_type']); ?>', 
-                       '<?php echo addslashes($status); ?>', 
-                       '<?php echo $row['request_date']; ?>', 
-                       '<?php echo addslashes($fullname); ?>', 
-                       '<?php echo addslashes($brgy); ?>', 
-                       '<?php echo $bdate; ?>', 
-                       '<?php echo $idNum; ?>',
-                       `<?php echo str_replace('`', '\`', $row['remarks'] ?? ''); ?>`)"> 
-    <i class="fas fa-edit"></i>
-</button>
-                            <button type="button" class="action-btn" title="View History" onclick="viewHistory(<?php echo $row['id']; ?>)">
-                                <i class="fas fa-history"></i>
-                            </button>
-                            <a href="records.php?action=approve&id=<?php echo $row['id']; ?>" class="action-btn btn-approve" onclick="return confirm('Approve this record?')"><i class="fas fa-check"></i></a>
-                            <button type="button" class="action-btn btn-delete" onclick="openDeleteModal('<?php echo $row['id']; ?>')">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </td>
+    <span class="status-badge status-<?php echo strtolower($status); ?>">
+        <?php echo htmlspecialchars($status); ?>
+    </span>
+</td>
+
+<td class="no-print" style="text-align:center;">
+
+    <!-- VIEW PROFILE -->
+    <a href="view_record_profile.php?id=<?php echo $row['id']; ?>" 
+       target="_blank"
+       class="action-btn btn-view"
+       title="View Printable Profile">
+        <i class="fas fa-eye"></i>
+    </a>
+
+    <!-- EDIT -->
+    <button type="button"
+        class="action-btn btn-edit"
+        title="Edit Record"
+        onclick="openModal(
+            '<?php echo $row['id']; ?>',
+            '<?php echo addslashes($row['medical_cause']); ?>',
+            '<?php echo addslashes($row['assistance_type']); ?>',
+            '<?php echo addslashes($status); ?>',
+            '<?php echo $row['request_date']; ?>',
+            '<?php echo addslashes($fullname); ?>',
+            '<?php echo addslashes($brgy); ?>',
+            '<?php echo $bdate; ?>',
+            '<?php echo $idNum; ?>',
+        )">
+        <i class="fas fa-edit"></i>
+    </button>
+
+    
+
+    <!-- APPROVE -->
+    <a href="records.php?action=approve&id=<?php echo $row['id']; ?>"
+       class="action-btn btn-approve"
+       onclick="return confirm('Approve this record?')">
+        <i class="fas fa-check"></i>
+    </a>
+
+    <!-- DELETE -->
+    <button type="button"
+        class="action-btn btn-delete"
+        onclick="openDeleteModal('<?php echo $row['id']; ?>')">
+        <i class="fas fa-trash"></i>
+    </button>
+
+</td>
                     </tr>
                     <?php endforeach; ?>
                 <?php else: ?>
@@ -484,19 +500,6 @@ $excel_url = "records.php?" . http_build_query(array_merge($_GET, ['action' => '
     </form>
 </div>
 
-<div id="viewModal" class="modal-overlay">
-    <div class="modal-box" style="width: 600px;">
-        <span class="close" onclick="closeViewModal()">&times;</span>
-        <h2 style="margin-top:0; color:var(--dswd-dark);"><i class="fas fa-file-alt"></i> Beneficiary Profile</h2>
-        <hr style="border:0; border-top: 1px solid #e2e8f0; margin:15px 0;">
-        <div id="viewContent">
-            <p style="text-align:center; padding:20px;">Fetching details...</p>
-        </div>
-        <div style="display:flex; justify-content: flex-end; margin-top:20px;">
-            <button type="button" onclick="closeViewModal()" class="action-btn" style="padding:10px 20px;">Close</button>
-        </div>
-    </div>
-</div>
 
 <div id="editModal" class="modal-overlay">
     <div class="modal-box">
@@ -542,11 +545,6 @@ $excel_url = "records.php?" . http_build_query(array_merge($_GET, ['action' => '
                 </select>
             </div>
 
-            <div style="margin-bottom:25px;">
-                <label style="font-size:12px; font-weight:700;">REMARKS / NOTES</label>
-                <textarea name="remarks" id="m_remarks" class="modal-input" style="height: 80px; resize: vertical; padding: 10px;" placeholder="Add notes here..."></textarea>
-            </div>
-
             <?php if($_SESSION['role'] === 'Staff'): ?>
             <div style="background: #fff1f2; padding: 15px; border-radius: 8px; border: 1px solid #fecaca; margin-bottom: 20px;">
                 <label style="font-size:11px; color:#e11d48; font-weight:700;">ADMIN AUTHORIZATION</label>
@@ -590,25 +588,10 @@ $excel_url = "records.php?" . http_build_query(array_merge($_GET, ['action' => '
 </div>
 
 <script>
-// View Full Info Logic
-function openViewModal(id) {
-    document.getElementById('viewModal').style.display = 'block';
-    document.getElementById('viewContent').innerHTML = '<p style="text-align:center; padding:20px;">Fetching details...</p>';
 
-    fetch('fetch_beneficiary_details.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'id=' + id
-    })
-    .then(response => response.text())
-    .then(data => {
-        document.getElementById('viewContent').innerHTML = data;
-    });
-}
 
-function closeViewModal() {
-    document.getElementById('viewModal').style.display = 'none';
-}
+
+
 
 function openModal(id, cause, type, status, rdate, name, brgy, bdate, idNum, remarks) {
     document.getElementById('m_id').value = id;
@@ -619,7 +602,6 @@ function openModal(id, cause, type, status, rdate, name, brgy, bdate, idNum, rem
     document.getElementById('m_cause').value = cause;
     document.getElementById('m_type').value = type;
     document.getElementById('m_status').value = status;
-    document.getElementById('m_remarks').value = remarks;
     document.getElementById('editModal').style.display = 'block';
 }
 
@@ -653,14 +635,22 @@ function closeDeleteModal() {
 }
 
 window.onclick = function(event) {
+
     let editM = document.getElementById('editModal');
-    let viewM = document.getElementById('viewModal');
     let histM = document.getElementById('historyModal');
-    let delM = document.getElementById('deleteModal');
-    if (event.target == editM) editM.style.display = "none";
-    if (event.target == viewM) viewM.style.display = "none";
-    if (event.target == histM) histM.style.display = "none";
-    if (event.target == delM) delM.style.display = "none";
+    let delM  = document.getElementById('deleteModal');
+
+    if (event.target == editM) {
+        editM.style.display = "none";
+    }
+
+    if (event.target == histM) {
+        histM.style.display = "none";
+    }
+
+    if (event.target == delM) {
+        delM.style.display = "none";
+    }
 }
 </script>
 </body>
