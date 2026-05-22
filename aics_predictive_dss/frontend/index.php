@@ -23,20 +23,12 @@ if(!is_numeric(trim($output))) {
 }
 
 // 1. Database Configuration
-$db_host = getenv('DB_HOST');
-$db_name = getenv('DB_NAME');
-$db_user = getenv('DB_USER');
-$db_pass = getenv('DB_PASSWORD');
+$host = 'localhost';
+$user = 'root';
+$pass = '';
+$db   = 'aics_dss'; 
 
-try {
-    // Establishing connection
-    $pdo = new PDO("mysql:host=$db_host;dbname=$db_name;charset=utf8", $db_user, $db_pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
-    echo "Connected successfully to the database from Vercel Serverless!";
-} catch (PDOException $e) {
-    echo "Connection failed: " . $e->getMessage();
-}
+$conn = new mysqli($host, $user, $pass, $db);
 
 // --- PIPELINE A: LSTM ---
 // Uses your custom windows executable and script environment variable
