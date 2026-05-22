@@ -73,15 +73,16 @@ def create_time_series(df, freq='D'):
 
     return ts
 
-def monthly_series(path=None):
-    df = load_csv_data(path)
+def monthly_series():
+    df = load_csv_data() # Ensure this has all data (up to April 2026)
     if df.empty:
         return pd.Series([0])
 
-    ts = create_time_series(df, freq='D')
-
-    # ✅ Last 90 days for LSTM input
-    return ts['request_count'].tail(90).astype(float)
+    # ✅ Aggregate by Month ('ME' = Month End)
+    ts = df.groupby(pd.Grouper(key='request_date', freq='ME')).size()
+    
+    # Return the full series so the LSTM has enough context to see the growth
+    return ts.astype(float)
 
 # =========================
 # Testing Block

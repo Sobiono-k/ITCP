@@ -1,158 +1,131 @@
 import numpy as np
-import sys
 import matplotlib.pyplot as plt
+import pandas as pd
+import os
 
-from preprocessing import monthly_series
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+
+import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout, Input
-from sklearn.metrics import mean_absolute_error, mean_squared_error
+from tensorflow.keras.layers import LSTM, Dense, Input, Dropout
+
+from preprocessing import load_csv_data
 
 
-# =========================
-# Predictive Scheduling - LSTM
-# =========================
-"""
-(Predictive - LSTM):
-- Analyzes chronological request counts.
-- Identifies seasonal patterns and cycles.
-- Result: Projected request volumes for upcoming days, weeks, or months.
-"""
+def prepare_data():
+    df = load_csv_data()
+
+    df['request_date'] = pd.to_datetime(df['request_date'])
+
+    # Monthly aggregation
+    ts = df.groupby(pd.Grouper(key='request_date', freq='ME')).size()
+
+    ts = ts.fillna(0)
+
+    # log transform FIRST (important)
+    ts_log = np.log1p(ts.values)
+
+    # spike detection on log scale
+    threshold = ts_log.mean() + (2 * ts_log.std())
+    spike_flag = (ts_log > threshold).astype(int)
+
+    # normalize log values
+    min_v = ts_log.min()
+    max_v = ts_log.max()
+    norm_v = (ts_log - min_v) / (max_v - min_v + 1e-8)
+
+    data = np.column_stack([norm_v, spike_flag])
+
+    return data, min_v, max_v, ts.values
 
 
-# =========================
-# FORECAST FUNCTION
-# =========================
-def forecast(model, values, window_size, min_val, max_val):
-    last_window = values[-window_size:]
-    last_window = last_window.reshape((1, window_size, 1))
-
-    pred = model.predict(last_window, verbose=0)[0][0]
-
-    # Denormalize
-    pred = pred * (max_val - min_val) + min_val
-
-    daily = max(0, pred)
-    weekly = daily * 7
-    monthly = daily * 30
-
-    return daily, weekly, monthly
-
-
-# =========================
-# MAIN FUNCTION
-# =========================
-def predict_volume():
-    # Load data
-    series_data = monthly_series()
-
-    print("DATA LENGTH:", len(series_data))
-    print(series_data.tail(10))
-
-    if series_data is None or len(series_data) < 10:
-        return 0
-
-    values = series_data.values.astype(float)
-
-    # =========================
-    # NORMALIZATION
-    # =========================
-    min_val = values.min()
-    max_val = values.max()
-
-    values = (values - min_val) / (max_val - min_val + 1e-8)
-
-    # =========================
-    # SEQUENCE CREATION
-    # =========================
-    WINDOW_SIZE = 7
+def create_sequences(data, window=6):
     X, y = [], []
 
-    for i in range(len(values) - WINDOW_SIZE):
-        X.append(values[i:i+WINDOW_SIZE])
-        y.append(values[i+WINDOW_SIZE])
+    for i in range(len(data) - window):
+        X.append(data[i:i + window])
+        y.append(data[i + window, 0])  # predict volume only
 
-    X = np.array(X)
-    y = np.array(y)
+    return np.array(X, dtype=np.float32), np.array(y, dtype=np.float32)
 
-    X = X.reshape((X.shape[0], X.shape[1], 1))
+def forecast_future(model, last_sequence, steps, min_v, max_v):
+    future = []
+    current = last_sequence.copy()
 
-    # =========================
-    # LSTM MODEL
-    # =========================
-    model = Sequential()
+    for _ in range(steps):
+        pred = model.predict(current[np.newaxis, :, :], verbose=0)[0][0]
+        future.append(pred)
 
-    model.add(Input(shape=(WINDOW_SIZE, 1)))
+        # shift window
+        new_row = np.array([pred, 0])  # spike unknown → 0
+        current = np.vstack([current[1:], new_row])
 
-    model.add(LSTM(64, return_sequences=True))
-    model.add(Dropout(0.2))
+    # inverse transform
+    future = np.array(future)
+    future = np.expm1(future * (max_v - min_v) + min_v)
 
-    model.add(LSTM(32))
-    model.add(Dropout(0.2))
+    return future
 
-    model.add(Dense(1))
 
-    model.compile(optimizer='adam', loss='mse')
+def run_lstm():
+    data, min_v, max_v, raw_ts = prepare_data()
+    WINDOW = 6
+    X, y = create_sequences(data, WINDOW)
 
-    # =========================
-    # TRAINING (EPOCHS)
-    # =========================
-    history = model.fit(
-        X,
-        y,
-        epochs=20,
-        verbose=1
+    # Use 90% for training
+    split = int(len(X) * 0.9)
+    X_train, X_test = X[:split], X[split:]
+    y_train, y_test = y[:split], y[split:]
+
+    model = Sequential([
+        Input(shape=(WINDOW, 2)),
+        LSTM(64, return_sequences=False),
+        Dense(32, activation='relu'),
+        Dense(1)
+    ])
+
+    # Using Mean Absolute Error (MAE) instead of Huber for sharper spikes
+    model.compile(optimizer='adam', loss='mae')
+    model.fit(X_train, y_train, epochs=200, verbose=0)
+
+    # Predict across the whole set
+    pred_norm = model.predict(X, verbose=0).flatten()
+    print(f"Normalized Prediction: {pred_norm}")
+    # Inverse transform
+    pred_final = np.expm1(pred_norm * (max_v - min_v) + min_v)
+    actual_final = np.expm1(y * (max_v - min_v) + min_v)
+    print(f"Max used for scaling: {max_v}")
+
+    plt.figure(figsize=(12, 5))
+    plt.plot(actual_final, label="Actual")
+    plt.plot(pred_final, '--', label="Predicted")
+    plt.axvline(x=split, color='red', linestyle=':', label="Test Start")
+    plt.legend(); plt.grid(True); plt.show()
+
+# -------- FUTURE FORECAST (REAL ML CURVE) --------
+    last_sequence = X[-1]
+    future_steps = 6  # next 6 months
+
+    future_forecast = forecast_future(
+        model,
+        last_sequence,
+        future_steps,
+        min_v,
+        max_v
     )
 
-    # =========================
-    # LOSS GRAPH
-    # =========================
-    plt.plot(history.history['loss'])
-    plt.title('LSTM Training Loss - Predictive Scheduling')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.show()
+    # Combine actual + future for dashboard
+    full_curve = np.concatenate([actual_final, future_forecast])
 
-    # =========================
-    # ACCURACY METRICS (MAE / RMSE)
-    # =========================
-    y_pred = model.predict(X, verbose=0).flatten()
+    # Output ONLY clean JSON for PHP
+    import json
 
-    mae = mean_absolute_error(y, y_pred)
-    rmse = np.sqrt(mean_squared_error(y, y_pred))
-
-    mae_real = mae * (max_val - min_val)
-    rmse_real = rmse * (max_val - min_val)
-
-    print("\n📊 MODEL ACCURACY METRICS")
-    print("MAE  :", round(mae, 4))
-    print("RMSE :", round(rmse, 4))
-
-    print("\n📊 REAL-SCALE ERRORS")
-    print("MAE (real):", round(mae_real, 2))
-    print("RMSE (real):", round(rmse_real, 2))
-
-    # =========================
-    # FORECAST OUTPUT
-    # =========================
-    daily, weekly, monthly = forecast(
-        model, values, WINDOW_SIZE, min_val, max_val
-    )
-
-    print("\n📊 Projected Request Volumes")
-    print("Daily Forecast:", int(daily))
-    print("Weekly Forecast:", int(weekly))
-    print("Monthly Forecast:", int(monthly))
-
-    return int(daily)
-
-
-# =========================
-# EXECUTION
-# =========================
+    print(json.dumps({
+        "actual": actual_final.tolist(),
+        "predicted": pred_final.tolist(),
+        "forecast": future_forecast.tolist(),
+        "full_curve": full_curve.tolist()
+    }))    
 if __name__ == "__main__":
-    try:
-        result = predict_volume()
-        print("\nFinal Prediction:", result)
-    except Exception as e:
-        print("ERROR:", e)
-        sys.stdout.write("0")
+    run_lstm()
