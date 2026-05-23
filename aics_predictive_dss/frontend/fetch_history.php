@@ -2,7 +2,7 @@
 // 1. Database Configuration (Matches your records.php)
 $host = 'localhost';
 $user = 'root';
-$pass = '';
+$pass = 'root';
 $db   = 'aics_dss'; 
 
 $conn = new mysqli($host, $user, $pass, $db);

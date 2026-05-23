@@ -2,7 +2,7 @@
 // lookup_applicant.php
 require_once 'auth.php';
 
-$host = 'localhost'; $user = 'root'; $pass = ''; $db = 'aics_dss';
+$host = 'localhost'; $user = 'root'; $pass = 'root'; $db = 'aics_dss';
 $conn = new mysqli($host, $user, $pass, $db);
 if ($conn->connect_error) die("Connection error: " . $conn->connect_error);
 

@@ -4,10 +4,11 @@ session_start();
 // 1. Establish Database Connection
 $host = 'localhost';
 $user = 'root';
-$pass = '';
-$db   = 'aics_dss'; 
+$pass = 'root'; 
+$db   = 'aics_dss'; // <-- Added the missing semicolon here!
 
 $conn = new mysqli($host, $user, $pass, $db);
+
 if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }

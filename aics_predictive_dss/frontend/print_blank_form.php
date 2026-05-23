@@ -1,53 +1,20 @@
-<?php
-// view_pending_profile.php
-// Opens in a new window — printable DSWD-styled profile of a pending applicant
-require_once 'auth.php';
-
-$conn = new mysqli('localhost', 'root', 'root', 'aics_dss');
-if ($conn->connect_error) die("Connection error.");
-
-$id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-if (!$id) { echo "Invalid request."; exit(); }
-
-$stmt = $conn->prepare("SELECT * FROM aics_sample_data WHERE id = ?");
-$stmt->bind_param("i", $id);
-$stmt->execute();
-$row = $stmt->get_result()->fetch_assoc();
-
-if (!$row) { echo "<p style='font-family:sans-serif;padding:40px;color:#ef4444;'>Record not found.</p>"; exit(); }
-
-$fullname  = ucwords(strtolower(trim($row['fname'] . ' ' . ($row['mname'] ? $row['mname'] . ' ' : '') . $row['lname'])));
-$bdate     = (!empty($row['birth_date']) && $row['birth_date'] !== '0000-00-00') ? date("F d, Y", strtotime($row['birth_date'])) : 'Not specified';
-$submitted = !empty($row['request_date']) 
-    ? date("F d, Y g:i A", strtotime($row['request_date'])) 
-    : 'N/A';
-$printed   = date("F d, Y g:i A");
-$status = $row['status'] ?? 'Pending';
-
-// Family composition (stored as JSON if available)
-$family = [];
-if (!empty($row['family_composition'])) {
-    $decoded = json_decode($row['family_composition'], true);
-    if (is_array($decoded)) $family = $decoded;
-}
-?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DSWD Profile — <?php echo htmlspecialchars($fullname); ?></title>
+    <title>DSWD Blank Intake Form — AICS</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
-            --navy:  #003893;
-            --red:   #ce1126;
-            --gold:  #c8a94a;
-            --light: #f0f4ff;
-            --border:#d1d9e6;
-            --text:  #1e293b;
-            --muted: #64748b;
+            --navy:   #003893;
+            --red:    #ce1126;
+            --gold:   #c8a94a;
+            --light:  #f0f4ff;
+            --border: #d1d9e6;
+            --text:   #1e293b;
+            --muted:  #64748b;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -82,8 +49,6 @@ if (!empty($row['family_composition'])) {
         .btn-print:hover  { background: #002a6d; }
         .btn-close  { background: #fff; color: var(--muted); border: 1px solid var(--border); }
         .btn-close:hover  { background: #f1f5f9; }
-        .btn-confirm-toolbar { background: #10b981; color: #fff; }
-        .btn-confirm-toolbar:hover { background: #059669; }
 
         /* ── Document wrapper ── */
         .document {
@@ -145,25 +110,23 @@ if (!empty($row['family_composition'])) {
             flex-wrap: wrap;
             gap: 10px;
         }
-        .code-banner .code {
-            font-family: 'Courier New', monospace;
-            font-size: 22px;
-            font-weight: 800;
-            color: var(--navy);
-            letter-spacing: 2px;
+        .code-banner .code-line {
+            border-bottom: 1.5px solid #cbd5e1;
+            width: 220px;
+            height: 28px;
+            margin-top: 4px;
         }
         .status-pill {
             padding: 5px 14px;
             border-radius: 20px;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 800;
             text-transform: uppercase;
             letter-spacing: .5px;
-            background: #fef9c3;
-            color: #854d0e;
-            border: 1px solid #fde68a;
+            background: #f1f5f9;
+            color: var(--muted);
+            border: 1px solid var(--border);
         }
-        .status-pill.claimed { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
 
         /* ── Section ── */
         .section-title {
@@ -211,9 +174,6 @@ if (!empty($row['family_composition'])) {
             padding-bottom: 5px;
             min-height: 26px;
         }
-        .info-item .value.highlight { color: var(--navy); }
-        .info-item .value.green     { color: #059669; }
-        .info-item .value.mono      { font-family: 'Courier New', monospace; color: var(--navy); font-size: 13px; }
 
         /* ── Family table ── */
         .family-table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -234,23 +194,20 @@ if (!empty($row['family_composition'])) {
             color: var(--text);
         }
         .family-table tr:last-child td { border-bottom: none; }
-        .family-table .empty-row td {
-            color: #cbd5e1; font-style: italic; text-align: center; padding: 20px;
-        }
 
         /* ── Signature area ── */
         .sig-area {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 40px;
-            padding: 24px 28px;
+            padding: 32px 28px 24px;
             border-top: 1.5px solid var(--border);
         }
         .sig-box { text-align: center; }
         .sig-line {
             border-bottom: 1.5px solid var(--text);
             margin-bottom: 6px;
-            height: 40px;
+            height: 30px;
         }
         .sig-label {
             font-size: 10px;
@@ -306,21 +263,15 @@ if (!empty($row['family_composition'])) {
 <!-- ── Screen toolbar ── -->
 <div class="toolbar">
     <button class="btn-toolbar btn-print" onclick="window.print()">
-        <i class="fas fa-print"></i> Print Profile
+        <i class="fas fa-print"></i> Print Blank Form
     </button>
-    <?php if (($row['status'] ?? '') !== 'Approved'): ?>
-   
-    <?php endif; ?>
     <button class="btn-toolbar btn-close" onclick="window.close()">
         <i class="fas fa-times"></i> Close
     </button>
-    <span style="font-size:12px; color:var(--muted); margin-left:auto;">
-        <i class="fas fa-print" style="margin-right:4px;"></i> Printed: <?php echo $printed; ?>
-    </span>
 </div>
 
 <!-- ══════════════════════════════════════════
-     PRINTABLE DOCUMENT
+     PRINTABLE BLANK DOCUMENT
 ══════════════════════════════════════════ -->
 <div class="document">
 
@@ -337,7 +288,6 @@ if (!empty($row['family_composition'])) {
         <div class="right-info">
             <div><strong>GENERAL INTAKE SHEET</strong></div>
             <div>DSWD-PMB-GF-011 | REV 02</div>
-            <div style="margin-top:4px;">Date Printed: <strong><?php echo $printed; ?></strong></div>
         </div>
     </div>
     <div class="accent-bar"></div>
@@ -345,22 +295,12 @@ if (!empty($row['family_composition'])) {
     <!-- Reference Code Banner -->
     <div class="code-banner">
         <div>
-            <div style="font-size:10px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; margin-bottom:4px;">Application Reference Code</div>
-            <div class="code"><?php echo htmlspecialchars($row['application_code']); ?></div>
+            <div style="font-size:10px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.8px;">Application Reference Code</div>
+            <div class="code-line"></div>
         </div>
         <div style="text-align:right;">
             <div style="font-size:10px; color:var(--muted); margin-bottom:4px;">Submission Status</div>
-            <?php
-                $status = $row['status'] ?? 'Pending';
-                $statusClass = strtolower($status);
-            ?>
-
-            <span class="status-pill <?php echo $statusClass === 'approved' ? 'claimed' : ''; ?>">
-                <?php echo htmlspecialchars($status); ?>
-            </span>
-            <div style="font-size:10px; color:var(--muted); margin-top:6px;">
-                Submitted: <?php echo $submitted; ?>
-            </div>
+            <span class="status-pill">BLANK / UNFILLED</span>
         </div>
     </div>
 
@@ -372,19 +312,19 @@ if (!empty($row['family_composition'])) {
     </div>
 
     <div class="info-body">
-        <!-- Name -->
+        <!-- Name Group -->
         <div class="info-grid cols-4" style="margin-bottom:18px;">
             <div class="info-item" style="grid-column: span 2;">
                 <label>Buong Pangalan / Full Name</label>
-                <div class="value highlight"><?php echo htmlspecialchars($fullname); ?></div>
+                <div class="value"></div>
             </div>
             <div class="info-item">
                 <label>Apelyido / Last Name</label>
-                <div class="value"><?php echo htmlspecialchars(ucwords(strtolower($row['lname']))); ?></div>
+                <div class="value"></div>
             </div>
             <div class="info-item">
                 <label>Unang Pangalan / First Name</label>
-                <div class="value"><?php echo htmlspecialchars(ucwords(strtolower($row['fname']))); ?></div>
+                <div class="value"></div>
             </div>
         </div>
 
@@ -392,30 +332,31 @@ if (!empty($row['family_composition'])) {
         <div class="info-grid" style="margin-bottom:18px;">
             <div class="info-item">
                 <label>Kapanganakan / Date of Birth</label>
-                <div class="value"><?php echo $bdate; ?></div>
+                <div class="value"></div>
             </div>
             <div class="info-item">
                 <label>Kasarian / Sex</label>
-                <div class="value"><?php echo htmlspecialchars($row['sex'] ?? '—'); ?></div>
+                <div class="value"></div>
             </div>
             <div class="info-item">
                 <label>Katayuang Sibil / Civil Status</label>
-                <div class="value"><?php echo htmlspecialchars($row['civil_status'] ?? '—'); ?></div>
+                <div class="value"></div>
             </div>
         </div>
 
+        <!-- Address details -->
         <div class="info-grid" style="margin-bottom:18px;">
             <div class="info-item">
                 <label>Barangay</label>
-                <div class="value"><?php echo htmlspecialchars($row['barangay'] ?? '—'); ?></div>
+                <div class="value"></div>
             </div>
             <div class="info-item">
                 <label>Lungsod / City</label>
-                <div class="value">Quezon City</div>
+                <div class="value"></div>
             </div>
             <div class="info-item">
                 <label>Rehiyon / Region</label>
-                <div class="value">NCR</div>
+                <div class="value"></div>
             </div>
         </div>
     </div>
@@ -433,31 +374,25 @@ if (!empty($row['family_composition'])) {
         <div class="info-grid cols-2" style="margin-bottom:18px;">
             <div class="info-item">
                 <label>Uri ng Tulong / Type of Assistance</label>
-                <div class="value green"><?php echo htmlspecialchars($row['assistance_type'] ?? '—'); ?></div>
+                <div class="value"></div>
             </div>
             <div class="info-item">
                 <label>Kategorya ng Kliyente / Client Category</label>
-                <div class="value"><?php echo htmlspecialchars($row['client_category'] ?? '—'); ?></div>
+                <div class="value"></div>
             </div>
         </div>
 
         <div class="info-grid cols-full" style="margin-bottom:18px;">
             <div class="info-item">
                 <label>Sub-Kategorya / Sub-Category</label>
-                <div class="value"><?php echo htmlspecialchars($row['client_subcategory'] ?? '—'); ?></div>
+                <div class="value"></div>
             </div>
         </div>
 
         <div class="info-grid cols-full">
             <div class="info-item">
                 <label>Dahilan ng Kahilingan / Medical Cause</label>
-                <div class="value" style="white-space:pre-line; line-height:1.6; font-size:13px;">
-                    <?php
-                    $cause = $row['medical_cause'] ?? '—';
-                    $decoded = json_decode($cause, true);
-                    echo htmlspecialchars(is_array($decoded) ? implode(', ', $decoded) : $cause);
-                    ?>
-                </div>
+                <div class="value" style="height: 50px;"></div>
             </div>
         </div>
     </div>
@@ -482,26 +417,14 @@ if (!empty($row['family_composition'])) {
                 </tr>
             </thead>
             <tbody>
-                <?php if (!empty($family)): ?>
-                    <?php foreach ($family as $member): ?>
-                    <tr>
-                        <td><?php echo htmlspecialchars($member['name'] ?? '—'); ?></td>
-                        <td><?php echo htmlspecialchars($member['relation'] ?? '—'); ?></td>
-                        <td><?php echo htmlspecialchars($member['age'] ?? '—'); ?></td>
-                        <td><?php echo htmlspecialchars($member['occupation'] ?? '—'); ?></td>
-                        <td><?php echo !empty($member['salary']) ? '₱ ' . number_format($member['salary'], 2) : '—'; ?></td>
-                    </tr>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <tr class="empty-row">
-                        <td colspan="5">No family composition data provided.</td>
-                    </tr>
-                <?php endif; ?>
-                <!-- Blank rows for manual writing if printed -->
-                <?php for ($i = count($family); $i < 3; $i++): ?>
+                <!-- 6 clean blank structural rows optimized for manual handwriting updates -->
+                <?php for ($i = 0; $i < 6; $i++): ?>
                 <tr>
-                    <td style="height:28px;">&nbsp;</td>
-                    <td></td><td></td><td></td><td></td>
+                    <td style="height:32px; border-bottom: 1.5px solid #e2e8f0;">&nbsp;</td>
+                    <td style="border-bottom: 1.5px solid #e2e8f0;"></td>
+                    <td style="border-bottom: 1.5px solid #e2e8f0;"></td>
+                    <td style="border-bottom: 1.5px solid #e2e8f0;"></td>
+                    <td style="border-bottom: 1.5px solid #e2e8f0;"></td>
                 </tr>
                 <?php endfor; ?>
             </tbody>
@@ -510,7 +433,7 @@ if (!empty($row['family_composition'])) {
 
     <hr class="hr">
 
-    <!-- ── SOCIAL WORKER'S ASSESSMENT (blank for staff to fill) ── -->
+    <!-- ── SOCIAL WORKER'S ASSESSMENT ── -->
     <div class="section-title red">
         <i class="fas fa-clipboard-check"></i>
         Social Worker's Assessment
@@ -518,8 +441,8 @@ if (!empty($row['family_composition'])) {
     </div>
 
     <div class="info-body">
-        <div style="border: 1.5px dashed var(--border); border-radius:8px; padding:16px; min-height:80px; background:#fafbff; font-size:12px; color:#94a3b8; font-style:italic;">
-            The client currently lacks financial resources due to unexpected circumstances, creating a need for assistance with basic necessities. The verification of their financial standing will be handled via a DSWD assessment interview.
+        <div style="border: 1.5px dashed var(--border); border-radius:8px; padding:16px; min-height:90px; background:#fafbff;">
+            <!-- Intentionally left blank for social workers to draft their assessments -->
         </div>
 
         <div class="info-grid cols-2" style="margin-top:18px;">
@@ -535,7 +458,7 @@ if (!empty($row['family_composition'])) {
         <div class="info-grid cols-full" style="margin-top:12px;">
             <div class="info-item">
                 <label>Fund Source</label>
-                <div class="value">PSP <?php echo date('Y'); ?></div>
+                <div class="value">&nbsp;</div>
             </div>
         </div>
     </div>
@@ -550,30 +473,22 @@ if (!empty($row['family_composition'])) {
     <!-- ── SIGNATURE AREA ── -->
     <div class="sig-area">
         <div class="sig-box">
-            <div class="sig-line"></div>
-            <div style="font-size:12px; font-weight:700; color:var(--text);"><?php echo htmlspecialchars($fullname); ?></div>
-            <div class="sig-label">Buong Pangalan at Pirma ng Kliyente<br>(Signature over Printed Name)</div>
+            <div class="sig-line" style="height: 50px;"></div>
+            <div class="sig-label" style="margin-top: 5px;">Buong Pangalan at Pirma ng Kliyente<br>(Signature over Printed Name)</div>
         </div>
         <div class="sig-box">
-            <div class="sig-line"></div>
-            <div style="font-size:12px; font-weight:700; color:var(--text);">&nbsp;</div>
-            <div class="sig-label">Interviewed by &nbsp;/&nbsp; Reviewed & Approved by<br>(Social Worker)</div>
+            <div class="sig-line" style="height: 50px;"></div>
+            <div class="sig-label" style="margin-top: 5px;">Interviewed by &nbsp;/&nbsp; Reviewed & Approved by<br>(Social Worker)</div>
         </div>
     </div>
 
     <!-- Footer -->
     <div class="doc-footer">
         <span>DSWD Field Office NCR &nbsp;|&nbsp; Batasan Hills Branch &nbsp;|&nbsp; Quezon City</span>
-        <span class="gold">AICS — Online Application System</span>
+        <span class="gold">AICS — Blank Intake Template</span>
     </div>
 
-</div><!-- end .document -->
-
-<script>
-// Auto-print option — remove if you don't want this
-// window.onload = () => window.print();
-</script>
+</div>
 
 </body>
 </html>
-<?php $conn->close(); ?>

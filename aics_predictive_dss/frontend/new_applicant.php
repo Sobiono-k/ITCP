@@ -24,6 +24,15 @@ require_once 'auth.php';?>
             --sidebar-width: 260px;
             --primary: #3b82f6;
             --success: #10b981;
+            
+            /* Blank Intake Form Print Styling Elements */
+            --navy:   #003893;
+            --red:    #ce1126;
+            --gold:   #c8a94a;
+            --light:  #f0f4ff;
+            --border: #d1d9e6;
+            --text:   #1e293b;
+            --muted:  #64748b;
         }
         
         body {  font-family: 'Inter', sans-serif;  margin: 0;  background: var(--bg-color);  display: grid; grid-template-columns: var(--sidebar-width) 1fr; min-height: 100vh; scrollbar-gutter: stable; 
@@ -92,12 +101,64 @@ require_once 'auth.php';?>
         .cat-title { font-weight: 800; color: #1e293b; margin: 15px 0 8px 0; font-size: 10.5px; text-transform: uppercase; border-left: 3px solid #3b82f6; padding-left: 8px; }
         .item { display: flex; gap: 8px; margin-bottom: 8px; color: #475569; }
 
+        /* Document layout styles for Blank Print Form */
+        .printable-blank-form { display: none; }
+        .printable-blank-form .document { background: #fff; border: 1.5px solid var(--border); }
+        .printable-blank-form .doc-header { background: var(--navy); color: #fff; padding: 18px 28px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+        .printable-blank-form .doc-header .logo-wrap { display: flex; align-items: center; gap: 14px; }
+        .printable-blank-form .doc-header .seal { width: 56px; height: 56px; background: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; flex-shrink: 0; }
+        .printable-blank-form .doc-header h1 { font-size: 15px; font-weight: 800; line-height: 1.2; }
+        .printable-blank-form .doc-header p { font-size: 10px; opacity: .75; margin-top: 3px; letter-spacing: .5px; }
+        .printable-blank-form .doc-header .right-info { text-align: right; font-size: 11px; opacity: .85; line-height: 1.7; }
+        .printable-blank-form .accent-bar { height: 5px; background: repeating-linear-gradient(90deg, var(--gold) 0, var(--gold) 20px, var(--red) 20px, var(--red) 40px); }
+        .printable-blank-form .code-banner { background: var(--light); border-bottom: 1.5px solid var(--border); padding: 14px 28px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+        .printable-blank-form .code-banner .code-line { border-bottom: 1.5px solid #cbd5e1; width: 220px; height: 28px; margin-top: 4px; }
+        .printable-blank-form .status-pill { padding: 5px 14px; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; background: #f1f5f9; color: var(--muted); border: 1px solid var(--border); }
+        .printable-blank-form .section-title { background: var(--navy); color: #fff; padding: 8px 28px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
+        .printable-blank-form .section-title.red { background: var(--red); }
+        .printable-blank-form .section-title span.sub { font-weight: 400; font-size: 10px; opacity: .8; font-style: italic; text-transform: none; letter-spacing: 0; }
+        .printable-blank-form .info-body { padding: 20px 28px; }
+        .printable-blank-form .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 24px; }
+        .printable-blank-form .info-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+        .printable-blank-form .info-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+        .printable-blank-form .info-grid.cols-full { grid-template-columns: 1fr; }
+        .printable-blank-form .info-item label { font-size: 9px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; display: block; margin-bottom: 3px; }
+        .printable-blank-form .info-item .value { font-size: 14px; color: var(--text); font-weight: 600; border-bottom: 1.5px solid #e2e8f0; padding-bottom: 5px; min-height: 26px; }
+        .printable-blank-form .family-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .printable-blank-form .family-table th { background: #f8fafc; padding: 8px 12px; text-align: left; font-size: 9px; font-weight: 800; color: var(--muted); text-transform: uppercase; border-bottom: 1.5px solid var(--border); letter-spacing: .5px; }
+        .printable-blank-form .family-table td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; color: var(--text); }
+        .printable-blank-form .sig-area { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; padding: 32px 28px 24px; border-top: 1.5px solid var(--border); }
+        .printable-blank-form .sig-box { text-align: center; }
+        .printable-blank-form .sig-line { border-bottom: 1.5px solid var(--text); margin-bottom: 6px; height: 30px; }
+        .printable-blank-form .sig-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+        .printable-blank-form .doc-footer { background: var(--navy); padding: 10px 28px; display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: rgba(255,255,255,.65); }
+        .printable-blank-form .doc-footer span.gold { color: var(--gold); font-weight: 700; }
+        .printable-blank-form .hr { border: 0; border-top: 1px solid #e2e8f0; margin: 0; }
+
         @media print {
-            .sidebar, .form-card, .main > div:first-child, .print-btn, .alert-success { display: none !important; }
-            body { display: block; }
+            /* Hide the entire system screen portal UI */
+            .sidebar, .form-card, .main > div:first-child, .print-btn, .alert-success, .checklist-card { display: none !important; }
+            body { display: block; background: #fff; }
             .main { margin: 0 !important; padding: 0 !important; width: 100% !important; }
-            .checklist-card { border: none !important; box-shadow: none !important; width: 100% !important; }
-            .checklist-body { height: auto !important; overflow: visible !important; }
+            
+            /* Unhide and scale the blank DSWD template sheet */
+            .printable-blank-form { display: block !important; }
+            .printable-blank-form .document { box-shadow: none; border: none; max-width: 100%; }
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+            @page { margin: 12mm 14mm; size: A4; }
+        }
+
+        @media (max-width: 600px) {
+            body { padding: 10px; }
+            .info-grid      { grid-template-columns: 1fr 1fr; }
+            .info-grid.cols-4 { grid-template-columns: 1fr 1fr; }
+            .sig-area       { grid-template-columns: 1fr; gap: 20px; }
+            .doc-header     { flex-direction: column; }
+            .doc-header .right-info { text-align: left; }
         }
     </style>
 </head>
@@ -274,7 +335,7 @@ require_once 'auth.php';?>
                     <div style="font-size: 11px; opacity: 0.9;">REQUIREMENTS LIST</div>
                 </div>
                 <button onclick="window.print()" class="print-btn" style="background: white; color: #3b82f6; border: none; padding: 5px 12px; border-radius: 4px; font-weight: 700; cursor: pointer; font-size: 11px;">
-                    <i class="fas fa-print"></i> PRINT
+                    <i class="fas fa-print"></i> PRINT FORM
                 </button>
             </div>
             <div class="checklist-body">
@@ -301,6 +362,154 @@ require_once 'auth.php';?>
                         <strong>FAKE DOCUMENTS:</strong> Submission of fake documents is punishable by law.
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════
+         INJECTED PRINTABLE BLANK TEMPLATE SHEET
+    ══════════════════════════════════════════ -->
+    <div class="printable-blank-form">
+        <div class="document">
+            <!-- Header -->
+            <div class="doc-header">
+                <div class="logo-wrap">
+                    <div class="seal">🏛️</div>
+                    <div>
+                        <h1>Department of Social Welfare and Development</h1>
+                        <p>AICS — ASSISTANCE TO INDIVIDUALS IN CRISIS SITUATION</p>
+                        <p>Batasan Hills Branch &nbsp;|&nbsp; Quezon City</p>
+                    </div>
+                </div>
+                <div class="right-info">
+                    <div><strong>GENERAL INTAKE SHEET</strong></div>
+                    <div>DSWD-PMB-GF-011 | REV 02</div>
+                </div>
+            </div>
+            <div class="accent-bar"></div>
+
+            <!-- Code Banner -->
+            <div class="code-banner">
+                <div>
+                    <div style="font-size:10px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.8px;">Application Reference Code</div>
+                    <div class="code-line"></div>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-size:10px; color:var(--muted); margin-bottom:4px;">Submission Status</div>
+                    <span class="status-pill">BLANK / UNFILLED</span>
+                </div>
+            </div>
+
+            <!-- Part I -->
+            <div class="section-title">
+                <i class="fas fa-user"></i>Part I: Beneficiary's Identifying Information <span class="sub">— Impormasyon ng Benepisyaryo</span>
+            </div>
+            <div class="info-body">
+                <div class="info-grid cols-4" style="margin-bottom:18px;">
+                    <div class="info-item" style="grid-column: span 2;"><label>Buong Pangalan / Full Name</label><div class="value"></div></div>
+                    <div class="info-item"><label>Apelyido / Last Name</label><div class="value"></div></div>
+                    <div class="info-item"><label>Unang Pangalan / First Name</label><div class="value"></div></div>
+                </div>
+                <div class="info-grid" style="margin-bottom:18px;">
+                    <div class="info-item"><label>Kapanganakan / Date of Birth</label><div class="value"></div></div>
+                    <div class="info-item"><label>Kasarian / Sex</label><div class="value"></div></div>
+                    <div class="info-item"><label>Katayuang Sibil / Civil Status</label><div class="value"></div></div>
+                </div>
+                <div class="info-grid" style="margin-bottom:18px;">
+                    <div class="info-item"><label>Barangay</label><div class="value"></div></div>
+                    <div class="info-item"><label>Lungsod / City</label><div class="value"></div></div>
+                    <div class="info-item"><label>Rehiyon / Region</label><div class="value"></div></div>
+                </div>
+            </div>
+
+            <hr class="hr">
+
+            <!-- Part II -->
+            <div class="section-title red">
+                <i class="fas fa-hand-holding-medical"></i>Part II: Assistance Details <span class="sub">— Detalye ng Tulong</span>
+            </div>
+            <div class="info-body">
+                <div class="info-grid cols-2" style="margin-bottom:18px;">
+                    <div class="info-item"><label>Uri ng Tulong / Type of Assistance</label><div class="value"></div></div>
+                    <div class="info-item"><label>Kategorya ng Kliyente / Client Category</label><div class="value"></div></div>
+                </div>
+                <div class="info-grid cols-full" style="margin-bottom:18px;">
+                    <div class="info-item"><label>Sub-Kategorya / Sub-Category</label><div class="value"></div></div>
+                </div>
+                <div class="info-grid cols-full">
+                    <div class="info-item"><label>Dahilan ng Kahilingan / Medical Cause</label><div class="value" style="height: 50px;"></div></div>
+                </div>
+            </div>
+
+            <hr class="hr">
+
+            <!-- Family Composition -->
+            <div class="section-title" style="background:#475569;">
+                <i class="fas fa-users"></i>Komposisyon ng Pamilya / Family Composition
+            </div>
+            <div class="info-body" style="padding-top:16px; padding-bottom:16px;">
+                <table class="family-table">
+                    <thead>
+                        <tr>
+                            <th style="width:35%;">Buong Pangalan (Complete Name)</th>
+                            <th style="width:22%;">Relasyon (Relationship)</th>
+                            <th style="width:10%;">Edad (Age)</th>
+                            <th style="width:18%;">Trabaho (Occupation)</th>
+                            <th style="width:15%;">Buwanang Kita (Salary)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php for ($i = 0; $i < 6; $i++): ?>
+                        <tr>
+                            <td style="height:32px; border-bottom: 1.5px solid #e2e8f0;">&nbsp;</td>
+                            <td style="border-bottom: 1.5px solid #e2e8f0;"></td>
+                            <td style="border-bottom: 1.5px solid #e2e8f0;"></td>
+                            <td style="border-bottom: 1.5px solid #e2e8f0;"></td>
+                            <td style="border-bottom: 1.5px solid #e2e8f0;"></td>
+                        </tr>
+                        <?php endfor; ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <hr class="hr">
+
+            <!-- Social Worker Assessment -->
+            <div class="section-title red">
+                <i class="fas fa-clipboard-check"></i>Social Worker's Assessment <span class="sub">— Para sa DSWD Personnel</span>
+            </div>
+            <div class="info-body">
+                <div style="border: 1.5px dashed var(--border); border-radius:8px; padding:16px; min-height:90px; background:#fafbff;"></div>
+                <div class="info-grid cols-2" style="margin-top:18px;">
+                    <div class="info-item"><label>Provided</label><div class="value">&nbsp;</div></div>
+                    <div class="info-item"><label>Amount</label><div class="value">&nbsp;</div></div>
+                </div>
+                <div class="info-grid cols-full" style="margin-top:12px;">
+                    <div class="info-item"><label>Fund Source</label><div class="value">&nbsp;</div></div>
+                </div>
+            </div>
+
+            <!-- Privacy Notice -->
+            <div style="padding: 14px 28px; background:#f8fafc; border-top: 1px solid var(--border); font-size:10px; color:var(--muted); line-height:1.7;">
+                We are committed to protect and respect the privacy of our clients and beneficiaries and we will only collect, record, store, process and use personal information in accordance with <strong>Republic Act No. 10173 or the Data Privacy Act of 2012.</strong> By signing this form you are giving your consent to the DSWD.
+            </div>
+
+            <!-- Signatures -->
+            <div class="sig-area">
+                <div class="sig-box">
+                    <div class="sig-line" style="height: 50px;"></div>
+                    <div class="sig-label" style="margin-top: 5px;">Buong Pangalan at Pirma ng Kliyente<br>(Signature over Printed Name)</div>
+                </div>
+                <div class="sig-box">
+                    <div class="sig-line" style="height: 50px;"></div>
+                    <div class="sig-label" style="margin-top: 5px;">Interviewed by &nbsp;/&nbsp; Reviewed & Approved by<br>(Social Worker)</div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="doc-footer">
+                <span>DSWD Field Office NCR &nbsp;|&nbsp; Batasan Hills Branch &nbsp;|&nbsp; Quezon City</span>
+                <span class="gold">AICS — Blank Intake Template</span>
             </div>
         </div>
     </div>

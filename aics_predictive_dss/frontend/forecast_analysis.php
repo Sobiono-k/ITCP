@@ -11,8 +11,8 @@ if (!isset($_SESSION['role'])) {
 // 1. Database Configuration
 $host = 'localhost';
 $user = 'root';
-$pass = '';
-$db   = 'aics_dss';
+$pass = 'root';
+$db   = 'aics_dss'; 
 
 $conn = new mysqli($host, $user, $pass, $db);
 
