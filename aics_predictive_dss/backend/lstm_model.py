@@ -18,8 +18,8 @@ def prepare_data():
 
     df['request_date'] = pd.to_datetime(df['request_date'])
 
-    # Monthly aggregation
-    ts = df.groupby(pd.Grouper(key='request_date', freq='ME')).size()
+    # CHANGED TO WEEKLY: Captures sub-monthly variations and weekly spikes
+    ts = df.groupby(pd.Grouper(key='request_date', freq='W')).size()
 
     ts = ts.fillna(0)
 
@@ -40,7 +40,7 @@ def prepare_data():
     return data, min_v, max_v, ts.values
 
 
-def create_sequences(data, window=6):
+def create_sequences(data, window=52):
     X, y = [], []
 
     for i in range(len(data) - window):
@@ -70,7 +70,15 @@ def forecast_future(model, last_sequence, steps, min_v, max_v):
 
 def run_lstm():
     data, min_v, max_v, raw_ts = prepare_data()
-    WINDOW = 6
+    
+    # EXPANDED WINDOW TO 52: Represents 52 weeks (1 full historical year)
+    # This allows the LSTM to compare the current week against this time last year
+    WINDOW = 52 
+    
+    # Ensure there is enough data to support a 52-week window + testing split
+    if len(data) <= WINDOW:
+        raise ValueError(f"Dataset too small ({len(data)} rows) for a 52-week window. Provide more history.")
+
     X, y = create_sequences(data, WINDOW)
 
     # Use 90% for training
@@ -92,20 +100,32 @@ def run_lstm():
     # Predict across the whole set
     pred_norm = model.predict(X, verbose=0).flatten()
     print(f"Normalized Prediction: {pred_norm}")
+    
     # Inverse transform
     pred_final = np.expm1(pred_norm * (max_v - min_v) + min_v)
     actual_final = np.expm1(y * (max_v - min_v) + min_v)
     print(f"Max used for scaling: {max_v}")
 
+    # -------- CALCULATE MARGIN OF ERROR METRICS --------
+    test_actual = actual_final[split:]
+    test_pred = pred_final[split:]
+    test_residuals = test_actual - test_pred
+
+    mae_original = float(np.mean(np.abs(test_residuals))) if len(test_residuals) > 0 else 0.0
+    moe_95 = float(1.96 * np.std(test_residuals)) if len(test_residuals) > 0 else 0.0
+
+    # -------- PLOT SYSTEM TIMELINE --------
     plt.figure(figsize=(12, 5))
     plt.plot(actual_final, label="Actual")
     plt.plot(pred_final, '--', label="Predicted")
-    plt.axvline(x=split, color='red', linestyle=':', label="Test Start")
+    # TEST START LINE REMOVED FROM THIS BLOCK AS REQUESTED
     plt.legend(); plt.grid(True); plt.show()
 
 # -------- FUTURE FORECAST (REAL ML CURVE) --------
     last_sequence = X[-1]
-    future_steps = 6  # next 6 months
+    
+    # FUTURE FORECAST EXTENDED: Forecast next 24 weeks (~6 months) on a weekly grain
+    future_steps = 24  
 
     future_forecast = forecast_future(
         model,
@@ -114,6 +134,10 @@ def run_lstm():
         min_v,
         max_v
     )
+
+    # Establish localized upper and lower boundary bounds for the forecast line
+    forecast_lower = np.maximum(0, future_forecast - moe_95).tolist()
+    forecast_upper = (future_forecast + moe_95).tolist()
 
     # Combine actual + future for dashboard
     full_curve = np.concatenate([actual_final, future_forecast])
@@ -125,7 +149,14 @@ def run_lstm():
         "actual": actual_final.tolist(),
         "predicted": pred_final.tolist(),
         "forecast": future_forecast.tolist(),
-        "full_curve": full_curve.tolist()
+        "forecast_lower": forecast_lower,
+        "forecast_upper": forecast_upper,
+        "full_curve": full_curve.tolist(),
+        "metrics": {
+            "average_error_volume": round(mae_original, 2),
+            "margin_of_error_95": round(moe_95, 2)
+        }
     }))    
+
 if __name__ == "__main__":
     run_lstm()
