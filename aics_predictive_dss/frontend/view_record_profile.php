@@ -3,7 +3,7 @@
 // Opens in a new window — printable DSWD-styled profile of a pending applicant
 require_once 'auth.php';
 
-$conn = new mysqli('localhost', 'root', 'root', 'aics_dss');
+$conn = new mysqli('localhost', 'root', '', 'aics_dss');
 if ($conn->connect_error) die("Connection error.");
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;

@@ -10,8 +10,8 @@ $current_role = $_SESSION['role'];
 // 1. Database Configuration
 $host = 'localhost';
 $user = 'root';
-$pass = 'root';
-$db   = 'aics_dss';  
+$pass = '';
+$db   = 'aics_dss'; 
 
 $conn = new mysqli($host, $user, $pass, $db);
 

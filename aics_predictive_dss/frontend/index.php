@@ -25,11 +25,10 @@ if(!is_numeric(trim($output))) {
 // 1. Database Configuration
 $host = 'localhost';
 $user = 'root';
-$pass = 'root';
+$pass = '';
 $db   = 'aics_dss'; 
 
 $conn = new mysqli($host, $user, $pass, $db);
-
 // --- PIPELINE A: LSTM ---
 // Uses your custom windows executable and script environment variable
 $lstm_raw_output = shell_exec("$python_path $script_path 2>&1"); 
@@ -160,6 +159,7 @@ if ($loc_col) {
 echo "<script>
     const csvData = " . json_encode($recent_records) . ";
     const mapData = " . json_encode($location_data) . ";
+    const backendLstmVal = " . floatval($lstm_val) . ";
 </script>";
 ?>
 
@@ -247,7 +247,7 @@ echo "<script>
 <div class="main">
     <div class="header-area">
         <h1>Predictive Decision Support Dashboard</h1>
-        <p>AICS Program Analytics — Batasan Hills Branch</p>
+        <p>AICS Program Analytics — Batasan Hills</p>
     </div>
 
     <div class="cards">
@@ -309,7 +309,7 @@ echo "<script>
             
             <div style="margin-top: 30px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h2>Request Volume Trend</h2>
+                    <h2>Volume Prediction Trend</h2>
                     <div class="chart-controls">
                         <button id="btn-daily" onclick="changeTimeframe('daily')" class="tgl-btn">Daily</button>
                         <button id="btn-monthly" onclick="changeTimeframe('monthly')" class="tgl-btn active">Monthly</button>
@@ -440,7 +440,7 @@ function updatePipelineInsights(unit) {
     const topCause = sorted[0][0];
     const topCount = sorted[0][1];
     const demandPercent = (topCount / activeTotal);
-    const predictedTotal = parseInt(document.getElementById('kpi-predicted').innerText.replace(/,/g, '')) || 0;
+    const predictedTotal = backendLstmVal || 0;
     const predictedCauseVolume = Math.round(predictedTotal * demandPercent);
 
     const pbTitle = document.getElementById('pb-insight-title');
@@ -501,43 +501,47 @@ function changeTimeframe(unit) {
     });
 
     const lastVal = dataValues[dataValues.length - 1] || 0;
-    const forecastVal = Math.round(lastVal * 1.12); 
+    const forecastVal = backendLstmVal > 0 ? backendLstmVal : Math.round(lastVal * 1.12); 
     const growth = (((forecastVal - lastVal) / (lastVal || 1)) * 100).toFixed(1);
 
     let actualChartData = [];
     let forecastChartData = [];
 
-    // This creates an exact behavioral copy of the blue line's curves 
-    // multiplied by our expected scaling factor to make it a true prediction line
-    const scaleFactor = forecastVal / (lastVal || 1);
-    
     if (unit === 'monthly') {
         const april2026Index = displayLabels.indexOf('Apr 26');
         actualChartData = dataValues.map((v, idx) => (idx <= april2026Index ? v : null));
-
-        // Yellow line mirrors the blue line's curves, but scales toward the target forecast
-        forecastChartData = dataValues.map((v, idx) => {
-            if (idx === 0) return dataValues[0]; // Match starting point exactly
-            return Math.round(v * scaleFactor);
-        });
+        
+        forecastChartData = dataValues.map(() => null);
+        if (april2026Index !== -1 && april2026Index + 1 < displayLabels.length) {
+            forecastChartData[april2026Index] = dataValues[april2026Index]; 
+            forecastChartData[april2026Index + 1] = forecastVal; 
+        } else {
+            forecastChartData[dataValues.length - 1] = forecastVal;
+        }
     } 
     else if (unit === 'yearly') {
         const idx2025 = displayLabels.indexOf("2025");
         actualChartData = dataValues.map((v, idx) => (idx <= idx2025 ? v : null));
 
-        forecastChartData = dataValues.map((v, idx) => {
-            if (idx === 0) return dataValues[0];
-            return Math.round(v * scaleFactor);
-        });
+        forecastChartData = dataValues.map(() => null);
+        if(idx2025 !== -1 && idx2025 + 1 < displayLabels.length) {
+            forecastChartData[idx2025] = dataValues[idx2025];
+            forecastChartData[idx2025 + 1] = forecastVal;
+        } else {
+            forecastChartData[dataValues.length - 1] = forecastVal;
+        }
     } 
     else {
         actualChartData = [...dataValues];
-        actualChartData[actualChartData.length - 1] = null;
+        if(actualChartData.length > 0) actualChartData[actualChartData.length - 1] = null;
 
-        forecastChartData = dataValues.map((v, idx) => {
-            if (idx === 0) return dataValues[0];
-            return Math.round(v * scaleFactor);
-        });
+        forecastChartData = dataValues.map(() => null);
+        if(dataValues.length > 1) {
+            forecastChartData[dataValues.length - 2] = dataValues[dataValues.length - 2];
+            forecastChartData[dataValues.length - 1] = forecastVal;
+        } else {
+            forecastChartData[dataValues.length - 1] = forecastVal;
+        }
     }
 
     const iTitle = document.getElementById('insight-title');
@@ -590,7 +594,7 @@ function changeTimeframe(unit) {
                         pointRadius: 4,
                         pointBackgroundColor: '#f59e0b',
                         fill: false,
-                        tension: 0.4 // Matches the curve tension of the blue line perfectly
+                        tension: 0.4 
                     }
                 ]
             },

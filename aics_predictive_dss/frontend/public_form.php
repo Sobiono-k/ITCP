@@ -1,7 +1,6 @@
 <?php
 // public_form.php — Public-facing AICS Online Application Form
 // No login required. Submits to submit_public_form.php
-// Sections mirror view_pending_profile.php exactly for print consistency
 ?>
 <!DOCTYPE html>
 <html lang="fil">
@@ -73,7 +72,6 @@
             margin: 20px auto 0;
             padding: 0 16px;
             display: flex;
-            gap: 0;
         }
         .step {
             flex: 1;
@@ -87,25 +85,17 @@
             background: #fff;
             border: 2px solid var(--border);
             color: var(--muted);
-            font-size: 12px;
-            font-weight: 800;
+            font-size: 12px; font-weight: 800;
             display: flex; align-items: center; justify-content: center;
             flex-shrink: 0;
             transition: .3s;
         }
-        .step.active .step-circle  { background: var(--navy); border-color: var(--navy); color: #fff; }
-        .step.done   .step-circle  { background: var(--success); border-color: var(--success); color: #fff; }
+        .step.active .step-circle { background: var(--navy); border-color: var(--navy); color: #fff; }
+        .step.done   .step-circle { background: var(--success); border-color: var(--success); color: #fff; }
         .step-label { font-size: 11px; font-weight: 600; color: var(--muted); }
-        .step.active .step-label   { color: var(--navy); }
-        .step.done   .step-label   { color: var(--success); }
-        .step-line {
-            flex: 1;
-            height: 2px;
-            background: var(--border);
-            margin: 0 6px;
-        }
-        .step.done + .step > .step-line,
-        .step-line.done { background: var(--success); }
+        .step.active .step-label  { color: var(--navy); }
+        .step.done   .step-label  { color: var(--success); }
+        .step-line { flex: 1; height: 2px; background: var(--border); margin: 0 6px; }
 
         /* ─── Form card ─── */
         .form-wrap {
@@ -119,20 +109,15 @@
             border: 1px solid var(--border);
             overflow: hidden;
             margin-bottom: 16px;
-            display: none; /* hidden by default, shown via JS */
+            display: none;
         }
         .form-section.active { display: block; }
 
         .sec-header {
             padding: 12px 22px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 13px;
-            font-weight: 800;
-            color: #fff;
-            text-transform: uppercase;
-            letter-spacing: .5px;
+            display: flex; align-items: center; gap: 10px;
+            font-size: 13px; font-weight: 800;
+            color: #fff; text-transform: uppercase; letter-spacing: .5px;
         }
         .sec-header.navy  { background: var(--navy); }
         .sec-header.red   { background: var(--red); }
@@ -150,32 +135,31 @@
             gap: 14px;
             margin-bottom: 16px;
         }
-        .field-row.g1 { grid-template-columns: 1fr; }
-        .field-row.g2 { grid-template-columns: 1fr 1fr; }
-        .field-row.g3 { grid-template-columns: 1fr 1fr 1fr; }
-        .field-row.g4 { grid-template-columns: 2fr 2fr 2fr 1fr; }
-        .field-row.g-name { grid-template-columns: 2fr 2fr 2fr 1fr; }
-        .field-row.g-addr { grid-template-columns: 2fr 1fr 1fr 1fr; }
-        .field-row.g-info { grid-template-columns: 1fr 1fr 1fr 1fr; }
+        .field-row.g2      { grid-template-columns: 1fr 1fr; }
+        .field-row.g3      { grid-template-columns: 1fr 1fr 1fr; }
+        .field-row.g-name  { grid-template-columns: 2fr 2fr 2fr 1fr; }
+        .field-row.g-addr  { grid-template-columns: 2fr 1fr 1fr 1fr; }
+        .field-row.g-info  { grid-template-columns: 1fr 1fr 1fr 1fr; }
 
         .field { display: flex; flex-direction: column; gap: 5px; }
         .field label {
-            font-size: 10px;
-            font-weight: 800;
-            color: var(--muted);
-            text-transform: uppercase;
-            letter-spacing: .6px;
+            font-size: 10px; font-weight: 800;
+            color: var(--muted); text-transform: uppercase; letter-spacing: .6px;
         }
         .field label .fil {
-            display: block;
-            font-size: 9px;
-            font-weight: 400;
-            font-style: italic;
-            color: #94a3b8;
-            text-transform: none;
-            letter-spacing: 0;
+            display: block; font-size: 9px; font-weight: 400;
+            font-style: italic; color: #94a3b8;
+            text-transform: none; letter-spacing: 0;
         }
         .req { color: var(--red); }
+
+        /* ── ALL TEXT INPUTS: uppercase display & stored value ── */
+        .field input[type="text"],
+        .field input[type="tel"],
+        .family-table input[type="text"] {
+            text-transform: uppercase;
+            letter-spacing: .5px;
+        }
 
         .field input:not([type="checkbox"]):not([type="radio"]),
         .field select,
@@ -203,9 +187,9 @@
         .field select.invalid { border-color: var(--red); background: #fff5f5; }
         .field input[readonly] { background: #f1f5f9; color: var(--muted); cursor: default; }
         .field select { cursor: pointer; }
-        .field textarea { resize: vertical; min-height: 80px; }
+        .field textarea { resize: vertical; min-height: 80px; text-transform: uppercase; }
 
-        /* ─── Checkbox groups ─── */
+        /* ─── Radio / Check grid ─── */
         .check-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -217,93 +201,61 @@
             margin-top: 6px;
         }
         .check-item {
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-            font-size: 13px;
-            color: var(--text);
-            cursor: pointer;
-            padding: 4px 0;
+            display: flex; align-items: flex-start; gap: 8px;
+            font-size: 13px; color: var(--text);
+            cursor: pointer; padding: 4px 0;
         }
-        .check-item input[type="checkbox"],
-        .check-item input[type="radio"] {
-            width: 15px; height: 15px;
-            flex-shrink: 0;
-            margin-top: 2px;
-            accent-color: var(--navy);
-            cursor: pointer;
+        .check-item input[type="radio"],
+        .check-item input[type="checkbox"] {
+            width: 15px; height: 15px; flex-shrink: 0;
+            margin-top: 2px; accent-color: var(--navy); cursor: pointer;
         }
         .check-other-input {
-            margin-top: 8px;
-            padding: 10px 12px;
-            border: 1.5px solid var(--border);
-            border-radius: 7px;
-            font-size: 14px;
-            font-family: 'Inter', sans-serif;
-            width: 100%;
-            display: none;
-            background: #fff;
+            margin-top: 8px; padding: 10px 12px;
+            border: 1.5px solid var(--border); border-radius: 7px;
+            font-size: 14px; font-family: 'Inter', sans-serif;
+            width: 100%; display: none; background: #fff;
+            text-transform: uppercase;
         }
         .check-other-input:focus { outline: none; border-color: var(--navy); }
 
         /* ─── Family table ─── */
         .family-table { width: 100%; border-collapse: collapse; font-size: 13px; }
         .family-table th {
-            background: #f1f5fb;
-            padding: 9px 10px;
-            text-align: left;
-            font-size: 10px;
-            font-weight: 800;
-            color: var(--muted);
-            text-transform: uppercase;
-            border-bottom: 1.5px solid var(--border);
-            letter-spacing: .4px;
+            background: #f1f5fb; padding: 9px 10px; text-align: left;
+            font-size: 10px; font-weight: 800; color: var(--muted);
+            text-transform: uppercase; border-bottom: 1.5px solid var(--border); letter-spacing: .4px;
         }
-        .family-table td { padding: 6px 6px; border-bottom: 1px solid #f0f4f8; vertical-align: middle; }
+        .family-table td { padding: 6px; border-bottom: 1px solid #f0f4f8; vertical-align: middle; }
         .family-table tr:last-child td { border-bottom: none; }
         .family-table input,
         .family-table select {
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 7px 8px;
-            font-size: 13px;
-            width: 100%;
-            background: #fafbff;
-            font-family: 'Inter', sans-serif;
+            border: 1px solid var(--border); border-radius: 6px;
+            padding: 7px 8px; font-size: 13px; width: 100%;
+            background: #fafbff; font-family: 'Inter', sans-serif;
         }
+        .family-table input[type="text"] { text-transform: uppercase; }
         .family-table input:focus,
         .family-table select:focus { outline: none; border-color: var(--navy); }
 
         .btn-add-row {
             display: inline-flex; align-items: center; gap: 6px;
-            padding: 8px 14px;
-            background: #eff6ff;
-            color: var(--navy);
-            border: 1.5px dashed var(--navy);
-            border-radius: 7px;
-            font-size: 12px; font-weight: 700;
-            cursor: pointer; margin-top: 10px;
-            transition: .2s;
+            padding: 8px 14px; background: #eff6ff;
+            color: var(--navy); border: 1.5px dashed var(--navy);
+            border-radius: 7px; font-size: 12px; font-weight: 700;
+            cursor: pointer; margin-top: 10px; transition: .2s;
         }
         .btn-add-row:hover { background: #dbeafe; }
 
-        /* ─── Navigation buttons ─── */
+        /* ─── Nav buttons ─── */
         .nav-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-            margin-top: 8px;
+            display: flex; justify-content: space-between;
+            align-items: center; gap: 12px; margin-top: 8px;
         }
         .btn-nav {
-            padding: 12px 28px;
-            border-radius: 8px;
-            border: none;
-            font-family: 'Inter', sans-serif;
-            font-size: 14px; font-weight: 700;
-            cursor: pointer;
-            display: flex; align-items: center; gap: 8px;
-            transition: .2s;
+            padding: 12px 28px; border-radius: 8px; border: none;
+            font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 700;
+            cursor: pointer; display: flex; align-items: center; gap: 8px; transition: .2s;
         }
         .btn-back   { background: #f1f5f9; color: var(--muted); border: 1px solid var(--border); }
         .btn-back:hover { background: #e2e8f0; }
@@ -315,53 +267,47 @@
 
         /* ─── Privacy box ─── */
         .privacy-box {
-            background: #f8faff;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 16px;
-            font-size: 12px;
-            color: var(--muted);
-            line-height: 1.8;
+            background: #f8faff; border: 1px solid var(--border);
+            border-radius: 8px; padding: 16px;
+            font-size: 12px; color: var(--muted); line-height: 1.8;
         }
         .privacy-check {
-            display: flex;
-            align-items: flex-start;
-            gap: 10px;
-            margin-top: 12px;
+            display: flex; align-items: flex-start; gap: 10px; margin-top: 12px;
         }
         .privacy-check input { width: 18px; height: 18px; accent-color: var(--navy); flex-shrink: 0; margin-top: 1px; }
         .privacy-check label { font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; }
 
-        /* ─── Error message ─── */
+        /* ─── Error banner ─── */
         .err-banner {
-            background: #fef2f2;
-            border: 1px solid #fca5a5;
-            border-radius: 8px;
-            padding: 12px 16px;
-            font-size: 13px;
-            color: #b91c1c;
-            display: none;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 16px;
+            background: #fef2f2; border: 1px solid #fca5a5;
+            border-radius: 8px; padding: 12px 16px; font-size: 13px;
+            color: #b91c1c; display: none; align-items: center; gap: 10px; margin-bottom: 16px;
         }
         .err-banner.show { display: flex; }
+
+        /* ─── Duplicate alert ─── */
+        .dup-alert {
+            max-width: 780px; margin: 16px auto 0; padding: 0 16px;
+        }
+        .dup-alert-inner {
+            background: #fef2f2; border: 1.5px solid #fca5a5;
+            border-radius: 10px; padding: 16px 20px;
+            display: flex; gap: 12px; align-items: flex-start;
+        }
 
         /* ─── Responsive ─── */
         @media (max-width: 640px) {
             .field-row.g-name,
             .field-row.g-addr,
             .field-row.g-info,
-            .field-row.g4,
             .field-row.g3 { grid-template-columns: 1fr 1fr; }
-            .check-grid    { grid-template-columns: 1fr; }
-            .sec-body      { padding: 16px; }
+            .check-grid   { grid-template-columns: 1fr; }
+            .sec-body     { padding: 16px; }
         }
         @media (max-width: 400px) {
             .field-row.g-name,
             .field-row.g-addr,
             .field-row.g-info,
-            .field-row.g4,
             .field-row.g3,
             .field-row.g2 { grid-template-columns: 1fr; }
         }
@@ -369,7 +315,30 @@
 </head>
 <body>
 
-<!-- Top header -->
+<?php
+// ── Show duplicate/error alerts passed back from submit_public_form.php ──
+$err = $_GET['err'] ?? '';
+$errMessages = [
+    'duplicate_name'  => 'Mayroon nang nakarehistrong aplikasyon na may <strong>parehong pangalan at petsa ng kapanganakan</strong>. Makipag-ugnayan sa counter para sa tulong.',
+    'duplicate_phone' => 'Ang <strong>numero ng telepono</strong> ay mayroon nang naka-pending na aplikasyon. Makipag-ugnayan sa counter.',
+    'db_error'        => 'May nangyaring error sa server. Pakisubukan muli o makipag-ugnayan sa kawani.',
+];
+if (isset($errMessages[$err])):
+?>
+<div class="dup-alert">
+    <div class="dup-alert-inner">
+        <i class="fas fa-exclamation-triangle" style="color:#ef4444;font-size:20px;flex-shrink:0;margin-top:2px;"></i>
+        <div>
+            <div style="font-weight:800;color:#991b1b;margin-bottom:4px;font-size:14px;">
+                <?php echo $err === 'db_error' ? 'Server Error' : 'Duplicate Application Detected'; ?>
+            </div>
+            <div style="font-size:13px;color:#b91c1c;"><?php echo $errMessages[$err]; ?></div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- ── Top header ── -->
 <div class="top-header">
     <div class="header-inner">
         <div class="header-seal">🏛️</div>
@@ -381,7 +350,7 @@
     <div class="accent-bar"></div>
 </div>
 
-<!-- Step progress -->
+<!-- ── Step progress ── -->
 <div class="progress-wrap" id="progressBar">
     <div class="step active" id="step-ind-1">
         <div class="step-circle">1</div>
@@ -400,18 +369,18 @@
 </div>
 
 <form action="submit_public_form.php" method="POST" id="aicsForm" novalidate>
-
 <div class="form-wrap">
 
-    <!-- ════ STEP 1: PERSONAL INFORMATION ════ -->
+    <!-- ════════════════════════════════════
+         STEP 1 — PERSONAL INFORMATION
+    ════════════════════════════════════ -->
     <div class="form-section active" id="step1">
 
         <div class="err-banner" id="err1">
             <i class="fas fa-exclamation-circle"></i>
-            <span id="err1msg">Please fill in all required fields before continuing.</span>
+            <span id="err1msg">Pakiusap punan ang lahat ng may * bago magpatuloy.</span>
         </div>
 
-        <!-- Beneficiary info -->
         <div class="sec-header navy">
             <i class="fas fa-user"></i>
             Part I — Impormasyon ng Benepisyaryo
@@ -419,29 +388,37 @@
         </div>
         <div class="sec-body">
 
+            <!-- Name row -->
             <div class="field-row g-name">
                 <div class="field">
                     <label>Apelyido <span class="req">*</span><span class="fil">Last Name</span></label>
-                    <input type="text" name="lname" placeholder="e.g. Dela Cruz" required autocomplete="family-name">
+                    <input type="text" name="lname" id="lname"
+                           placeholder="DELA CRUZ" required
+                           autocomplete="family-name" autocapitalize="characters">
                 </div>
                 <div class="field">
                     <label>Unang Pangalan <span class="req">*</span><span class="fil">First Name</span></label>
-                    <input type="text" name="fname" placeholder="e.g. Juan" required autocomplete="given-name">
+                    <input type="text" name="fname" id="fname"
+                           placeholder="JUAN" required
+                           autocomplete="given-name" autocapitalize="characters">
                 </div>
                 <div class="field">
                     <label>Gitnang Pangalan<span class="fil">Middle Name</span></label>
-                    <input type="text" name="mname" placeholder="e.g. Santos" autocomplete="additional-name">
+                    <input type="text" name="mname" id="mname"
+                           placeholder="SANTOS"
+                           autocomplete="additional-name" autocapitalize="characters">
                 </div>
                 <div class="field">
                     <label>Ext.<span class="fil">Sr, Jr, II</span></label>
                     <select name="ext">
                         <option value="">—</option>
-                        <option>Sr.</option><option>Jr.</option>
+                        <option>SR.</option><option>JR.</option>
                         <option>II</option><option>III</option><option>IV</option>
                     </select>
                 </div>
             </div>
 
+            <!-- Birth date / age / sex / civil status -->
             <div class="field-row g-info">
                 <div class="field">
                     <label>Kapanganakan <span class="req">*</span><span class="fil">Birthdate</span></label>
@@ -464,15 +441,17 @@
                     <select name="civil_status" required>
                         <option value="">— Piliin —</option>
                         <option>Single</option><option>Married</option>
-                        <option>Widowed</option><option>Separated</option><option>Cohabiting</option>
+                        <option>Widowed</option><option>Separated</option><option>Common-law</option>
                     </select>
                 </div>
             </div>
 
+            <!-- Address -->
             <div class="field-row g-addr">
                 <div class="field">
-                    <label>House No./Street/Purok<span class="fil">Ex. 123 Sun St.</span></label>
-                    <input type="text" name="street" placeholder="House No./Street/Purok">
+                    <label>House No./Street/Purok<span class="fil">Ex. 123 SUN ST.</span></label>
+                    <input type="text" name="street" placeholder="123 MABINI ST."
+                           autocapitalize="characters">
                 </div>
                 <div class="field">
                     <label>Barangay <span class="req">*</span></label>
@@ -480,13 +459,13 @@
                         <option value="">— Piliin —</option>
                         <?php
                         $brgy = ["Alicia","Amihan","Apolonio Samson","Aurora","Baesa","Bagbag","Bagong Pag-Asa","Bagong Silangan","Bagumbayan","Bagumbuhay","Bahay Toro","Balingasa","Balintawak","Bangkulasi","Batasan Hills","Bayanihan","Blue Ridge A","Blue Ridge B","Botocan","Bungad","Camp Aguinaldo","Capri","Commonwealth","Culiat","Damar","Damayan","Damayan Lagi","Damayang Lagi","Del Monte","Dioquino Zobel","Don Manuel","Dona Aurora","Dona Faustina I","Dona Faustina II","Dona Imelda","Dona Josefa","Duyan-Duyan","E. Rodriguez","East Kamias","Escopa I","Escopa II","Escopa III","Escopa IV","Fairview","Fernandez","Filinvest I","Filinvest II","Fuentebella","Gulod","Holy Spirit","Horseshoe","Immaculate Concepcion","Kaligayahan","Kalusugan","Kamuning","Katipunan","Kaunlaran","Kristong Hari","Krus na Ligas","Laging Handa","Libis","Lourdes","Loyola Heights","Maharlika","Malaya","Mangga","Manresa","Mariana","Mariblo","Marilag","Masagana","Masambong","Matalahib","Matandang Balara","Milagrosa","Model","Nagkaisang Nayon","Nayong Kanluran","New Era","Novaliches Proper","Obrero","Old Capitol Site","Pagasa","Pag-ibig sa Nayon","Palingon","Paraiso","Pasong Putik","Phil-Am","Pinagkaisahan","Pinyahan","Quirino 2-A","Quirino 2-B","Quirino 2-C","Quirino 3-A","Ramon Magsaysay","Roxas","Sacred Heart","Saint Ignatius","Saint Peter","Salvacion","San Agustin","San Antonio","San Bartolome","San Isidro","San Isidro Labrador","San Jose","San Martin de Porres","San Roque","San Vicente","Sangandaan","Santa Cruz","Santa Lucia","Santa Monica","Santa Teresita","Santo Cristo","Santo Domingo","Santo Niño","Santulan","Silangan","Soccorro","South Triangle","Talayan","Talipapa","Tandang Sora","Tatalon","Teachers Village East","Teachers Village West","U.P. Campus","Ugong Norte","Unang Sigaw","Valencia","Vasra","Veterans Village","Villa Maria Clara","West Kamias","West Triangle","White Plains"];
-                        foreach ($brgy as $b) echo "<option value=\"$b\">$b</option>";
+                        foreach ($brgy as $b) echo "<option value=\"" . htmlspecialchars($b) . "\">" . htmlspecialchars($b) . "</option>";
                         ?>
                     </select>
                 </div>
                 <div class="field">
                     <label>City<span class="fil">Lungsod</span></label>
-                    <input type="text" name="city" value="Quezon City" readonly>
+                    <input type="text" name="city" value="QUEZON CITY" readonly>
                 </div>
                 <div class="field">
                     <label>Region</label>
@@ -494,18 +473,22 @@
                 </div>
             </div>
 
+            <!-- Contact / Occupation -->
             <div class="field-row g2">
                 <div class="field">
                     <label>Numero ng Telepono <span class="req">*</span><span class="fil">Mobile No.</span></label>
-                    <input type="tel" name="cp_number" placeholder="09XX-XXX-XXXX" required>
+                    <input type="tel" name="cp_number" id="cp_number"
+                           placeholder="09XX-XXX-XXXX" required>
                 </div>
                 <div class="field">
-                    <label>Trabaho<span class="fil">Occupation</span></label>
-                    <input type="text" name="occupation" placeholder="e.g. Construction Worker">
+                    <label>Trabaho<span class="fil">Occupation, N/A if none</span></label>
+                    <input type="text" name="occupation"
+                           placeholder="TRABAHO"
+                           autocapitalize="characters">
                 </div>
             </div>
 
-        </div>
+        </div><!-- end sec-body -->
 
         <div class="sec-body" style="padding-top:0;">
             <div class="nav-row">
@@ -515,14 +498,17 @@
                 </button>
             </div>
         </div>
-    </div>
+    </div><!-- end step1 -->
 
-    <!-- ════ STEP 2: ASSISTANCE DETAILS ════ -->
+
+    <!-- ════════════════════════════════════
+         STEP 2 — ASSISTANCE DETAILS
+    ════════════════════════════════════ -->
     <div class="form-section" id="step2">
 
         <div class="err-banner" id="err2">
             <i class="fas fa-exclamation-circle"></i>
-            <span id="err2msg">Please fill in all required fields before continuing.</span>
+            <span id="err2msg">Pakiusap punan ang lahat ng may * bago magpatuloy.</span>
         </div>
 
         <div class="sec-header red">
@@ -532,10 +518,11 @@
         </div>
         <div class="sec-body">
 
+            <!-- Client Category -->
             <div class="field-row g2" style="margin-bottom:4px;">
                 <div class="field">
                     <label>Kategorya ng Kliyente <span class="req">*</span><span class="fil">Client Category</span></label>
-                    <select name="client_category" required>
+                    <select name="client_category" id="client_category" required>
                         <option value="">— Piliin —</option>
                         <option>Family Heads and Other Needy Adult</option>
                         <option>Persons with Disabilities</option>
@@ -544,11 +531,17 @@
                     </select>
                 </div>
             </div>
-            <input type="hidden" name="client_subcategory" id="subcatHidden">
 
-            <!-- Sub-category — single select -->
+            <!-- Hidden fields to carry radio values -->
+            <input type="hidden" name="client_subcategory" id="subcatHidden">
+            <input type="hidden" name="medical_cause"      id="medCauseHidden">
+            <input type="hidden" name="assistance_type"    id="assistHidden">
+
+            <!-- Sub-category -->
             <div class="field" style="margin-bottom:16px;">
-                <label>Pumili ng sub-kategorya: <span class="req">*</span><span class="fil">Isa lamang (Select one only)</span></label>
+                <label>Pumili ng Sub-Kategorya: <span class="req">*</span>
+                    <span class="fil">Isa lamang (Select one only)</span>
+                </label>
                 <div class="check-grid" id="subcatGrid">
                     <?php
                     $subcats = [
@@ -565,21 +558,26 @@
                     foreach ($subcats as $s):
                     ?>
                     <label class="check-item">
-                        <input type="radio" name="client_subcategory_radio" class="subcat-check" value="<?php echo htmlspecialchars($s); ?>">
+                        <input type="radio" name="client_subcategory_radio" class="subcat-check"
+                               value="<?php echo htmlspecialchars($s); ?>">
                         <?php echo htmlspecialchars($s); ?>
                     </label>
                     <?php endforeach; ?>
                     <label class="check-item">
-                        <input type="radio" name="client_subcategory_radio" id="subcat_other_cb" value="__other__"> Others (specify)
+                        <input type="radio" name="client_subcategory_radio"
+                               id="subcat_other_cb" value="__other__">
+                        Others (specify)
                     </label>
-                    <input type="text" class="check-other-input" id="subcat_other_input" placeholder="Please specify...">
+                    <input type="text" class="check-other-input" id="subcat_other_input"
+                           placeholder="PLEASE SPECIFY..." autocapitalize="characters">
                 </div>
             </div>
 
-            <!-- Medical Cause — single select -->
+            <!-- Medical Cause -->
             <div class="field" style="margin-bottom:16px;">
-                <label>Dahilan ng Paghingi ng Tulong <span class="req">*</span><span class="fil">Medical Cause — Isa lamang (Select one only)</span></label>
-                <input type="hidden" name="medical_cause" id="medCauseHidden">
+                <label>Dahilan ng Paghingi ng Tulong <span class="req">*</span>
+                    <span class="fil">Medical Cause — Isa lamang (Select one only)</span>
+                </label>
                 <div class="check-grid">
                     <?php
                     $causes = ["Medical Checkup","Emergency Treatment","Maternity Care","Chemotherapy",
@@ -587,21 +585,25 @@
                     foreach ($causes as $c):
                     ?>
                     <label class="check-item">
-                        <input type="radio" name="medical_cause_radio" class="medcause-check" value="<?php echo htmlspecialchars($c); ?>">
+                        <input type="radio" name="medical_cause_radio" class="medcause-check"
+                               value="<?php echo htmlspecialchars($c); ?>">
                         <?php echo htmlspecialchars($c); ?>
                     </label>
                     <?php endforeach; ?>
                     <label class="check-item">
-                        <input type="radio" name="medical_cause_radio" id="medother_cb" value="__other__"> Others (specify)
+                        <input type="radio" name="medical_cause_radio" id="medother_cb" value="__other__">
+                        Others (specify)
                     </label>
-                    <input type="text" class="check-other-input" id="medother_input" placeholder="Please specify...">
+                    <input type="text" class="check-other-input" id="medother_input"
+                           placeholder="PLEASE SPECIFY..." autocapitalize="characters">
                 </div>
             </div>
 
-            <!-- Assistance Type — single select -->
+            <!-- Assistance Type -->
             <div class="field" style="margin-bottom:8px;">
-                <label>Uri ng Tulong na Hinihiling <span class="req">*</span><span class="fil">Type of Assistance — Isa lamang (Select one only)</span></label>
-                <input type="hidden" name="assistance_type" id="assistHidden">
+                <label>Uri ng Tulong na Hinihiling <span class="req">*</span>
+                    <span class="fil">Type of Assistance — Isa lamang (Select one only)</span>
+                </label>
                 <div class="check-grid">
                     <?php
                     $assists = ["Medical Assistance","Cash Guarantee","Surgery Financial Support",
@@ -610,18 +612,22 @@
                     foreach ($assists as $a):
                     ?>
                     <label class="check-item">
-                        <input type="radio" name="assistance_type_radio" class="assist-check" value="<?php echo htmlspecialchars($a); ?>">
+                        <input type="radio" name="assistance_type_radio" class="assist-check"
+                               value="<?php echo htmlspecialchars($a); ?>">
                         <?php echo htmlspecialchars($a); ?>
                     </label>
                     <?php endforeach; ?>
                     <label class="check-item">
-                        <input type="radio" name="assistance_type_radio" id="assist_other_cb" value="__other__"> Others (specify)
+                        <input type="radio" name="assistance_type_radio"
+                               id="assist_other_cb" value="__other__">
+                        Others (specify)
                     </label>
-                    <input type="text" class="check-other-input" id="assist_other_input" placeholder="Please specify...">
+                    <input type="text" class="check-other-input" id="assist_other_input"
+                           placeholder="PLEASE SPECIFY..." autocapitalize="characters">
                 </div>
             </div>
 
-        </div>
+        </div><!-- end sec-body -->
 
         <div class="sec-body" style="padding-top:0;">
             <div class="nav-row">
@@ -633,14 +639,17 @@
                 </button>
             </div>
         </div>
-    </div>
+    </div><!-- end step2 -->
 
-    <!-- ════ STEP 3: FAMILY COMPOSITION + SUBMIT ════ -->
+
+    <!-- ════════════════════════════════════
+         STEP 3 — FAMILY COMPOSITION + SUBMIT
+    ════════════════════════════════════ -->
     <div class="form-section" id="step3">
 
         <div class="err-banner" id="err3">
             <i class="fas fa-exclamation-circle"></i>
-            <span id="err3msg">Please agree to the privacy policy before submitting.</span>
+            <span id="err3msg">Kailangan ninyong sumang-ayon sa Data Privacy Policy bago mag-submit.</span>
         </div>
 
         <div class="sec-header slate">
@@ -667,7 +676,8 @@
                     <tbody id="familyBody">
                         <?php for ($i = 0; $i < 3; $i++): ?>
                         <tr>
-                            <td><input type="text" name="family_name[]" placeholder="Full name"></td>
+                            <td><input type="text" name="family_name[]"
+                                       placeholder="FULL NAME" autocapitalize="characters"></td>
                             <td>
                                 <select name="family_relation[]">
                                     <option value="">— Select —</option>
@@ -676,8 +686,10 @@
                                 </select>
                             </td>
                             <td><input type="number" name="family_age[]" placeholder="Age" min="0" max="120"></td>
-                            <td><input type="text" name="family_occupation[]" placeholder="Occupation"></td>
-                            <td><input type="number" name="family_salary[]" placeholder="0.00" min="0" step="0.01"></td>
+                            <td><input type="text" name="family_occupation[]"
+                                       placeholder="OCCUPATION" autocapitalize="characters"></td>
+                            <td><input type="number" name="family_salary[]"
+                                       placeholder="0.00" min="0" step="0.01"></td>
                         </tr>
                         <?php endfor; ?>
                     </tbody>
@@ -717,16 +729,35 @@
                 </button>
             </div>
         </div>
-    </div>
+    </div><!-- end step3 -->
 
 </div><!-- end form-wrap -->
 </form>
 
+<!-- ════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════ -->
 <script>
-// ── Current step state ──
 let currentStep = 1;
 
-// ── Auto-compute age ──
+/* ── Force uppercase on every applicable text input (real value, not just CSS) ── */
+function forceUpper(el) {
+    const start = el.selectionStart;
+    const end   = el.selectionEnd;
+    el.value    = el.value.toUpperCase();
+    try { el.setSelectionRange(start, end); } catch(e) {}
+}
+
+/* Apply to all existing text / tel inputs */
+document.querySelectorAll('input[type="text"], input[type="tel"]').forEach(el => {
+    if (el.readOnly) return;
+    el.addEventListener('input', () => forceUpper(el));
+    el.addEventListener('blur',  () => forceUpper(el));
+});
+
+/* Also applied to dynamically-added family rows via addFamilyRow() */
+
+/* ── Auto-compute age from DOB ── */
 document.getElementById('dob').addEventListener('change', function () {
     const dob = new Date(this.value);
     if (isNaN(dob)) return;
@@ -737,17 +768,13 @@ document.getElementById('dob').addEventListener('change', function () {
     document.getElementById('age').value = age >= 0 ? age : '';
 });
 
-// ── "Others" toggles for radio groups ──
+/* ── "Others" text field toggle for radio groups ── */
 function watchRadioOther(radioName, otherVal, inputId) {
     document.querySelectorAll('[name="' + radioName + '"]').forEach(r => {
         r.addEventListener('change', () => {
             const inp = document.getElementById(inputId);
-            if (r.value === otherVal && r.checked) {
-                inp.style.display = 'block';
-            } else {
-                inp.style.display = 'none';
-                inp.value = '';
-            }
+            inp.style.display = (r.value === otherVal && r.checked) ? 'block' : 'none';
+            if (r.value !== otherVal) inp.value = '';
         });
     });
 }
@@ -755,56 +782,46 @@ watchRadioOther('client_subcategory_radio', '__other__', 'subcat_other_input');
 watchRadioOther('medical_cause_radio',      '__other__', 'medother_input');
 watchRadioOther('assistance_type_radio',    '__other__', 'assist_other_input');
 
-// ── Collect single radio value into hidden field ──
+/* ── Collect a radio group's value into a hidden field ── */
 function collectRadio(radioName, otherVal, otherInputId, hiddenId) {
     const selected = document.querySelector('[name="' + radioName + '"]:checked');
-    if (!selected) {
-        document.getElementById(hiddenId).value = '';
-        return '';
-    }
-    let val = selected.value;
-    if (val === otherVal) {
-        const otherText = document.getElementById(otherInputId).value.trim();
-        val = otherText || '';
-    }
+    if (!selected) { document.getElementById(hiddenId).value = ''; return ''; }
+    let val = selected.value === otherVal
+        ? document.getElementById(otherInputId).value.toUpperCase().trim()
+        : selected.value;
     document.getElementById(hiddenId).value = val;
     return val;
 }
 
-// ── Step validation ──
+/* ── Step validation ── */
 function validateStep(step) {
     if (step === 1) {
-        const required = ['lname', 'fname', 'dob', 'sex', 'civil_status', 'barangay', 'cp_number'];
-        let valid = true;
-        let firstBad = null;
+        const required = ['lname','fname','dob','sex','civil_status','barangay','cp_number'];
+        let valid = true, firstBad = null;
+
         required.forEach(name => {
             const el = document.querySelector('[name="' + name + '"]');
             if (!el) return;
             if (!el.value.trim()) {
-                el.classList.add('invalid');
-                valid = false;
+                el.classList.add('invalid'); valid = false;
                 if (!firstBad) firstBad = el;
-            } else {
-                el.classList.remove('invalid');
-            }
+            } else { el.classList.remove('invalid'); }
         });
 
-        // Mobile number basic validation
-        const mobile = document.querySelector('[name="cp_number"]');
-        if (mobile && mobile.value.trim() && !/^(09|\+639)\d{9}$/.test(mobile.value.replace(/[-\s]/g, ''))) {
-            mobile.classList.add('invalid');
-            valid = false;
-            document.getElementById('err1msg').textContent = 'Pakiusap, maglagay ng tamang numero ng telepono (09XXXXXXXXX).';
+        /* Mobile validation */
+        const mobile = document.getElementById('cp_number');
+        if (mobile && mobile.value.trim() &&
+            !/^(09|\+639)\d{9}$/.test(mobile.value.replace(/[-\s]/g, ''))) {
+            mobile.classList.add('invalid'); valid = false;
+            showErr(1, 'Pakiusap, maglagay ng tamang numero ng telepono (09XXXXXXXXX).');
             if (!firstBad) firstBad = mobile;
         }
 
         if (!valid) {
-            const banner = document.getElementById('err1');
-            if (document.getElementById('err1msg').textContent === 'Please fill in all required fields before continuing.') {
+            if (document.getElementById('err1msg').textContent.includes('required'))
                 document.getElementById('err1msg').textContent = 'Pakiusap punan ang lahat ng may * bago magpatuloy.';
-            }
-            banner.classList.add('show');
-            if (firstBad) firstBad.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            document.getElementById('err1').classList.add('show');
+            if (firstBad) firstBad.scrollIntoView({ behavior:'smooth', block:'center' });
         } else {
             document.getElementById('err1').classList.remove('show');
         }
@@ -812,94 +829,79 @@ function validateStep(step) {
     }
 
     if (step === 2) {
-        // Must select client_category
-        const cat = document.querySelector('[name="client_category"]');
-        if (!cat.value) { cat.classList.add('invalid'); showErr(2, 'Piliin ang Client Category.'); return false; }
+        const cat = document.getElementById('client_category');
+        if (!cat.value) { cat.classList.add('invalid'); showErr(2,'Piliin ang Client Category.'); return false; }
         cat.classList.remove('invalid');
 
-        // Must select one subcat
-        const subcatVal = collectRadio('client_subcategory_radio', '__other__', 'subcat_other_input', 'subcatHidden');
-        if (!subcatVal) { showErr(2, 'Pumili ng isang Sub-Kategorya.'); return false; }
-
-        // Must select one medical cause
-        const causeVal = collectRadio('medical_cause_radio', '__other__', 'medother_input', 'medCauseHidden');
-        if (!causeVal) { showErr(2, 'Pumili ng isang Medical Cause.'); return false; }
-
-        // Must select one assistance type
-        const assistVal = collectRadio('assistance_type_radio', '__other__', 'assist_other_input', 'assistHidden');
-        if (!assistVal) { showErr(2, 'Pumili ng isang Uri ng Tulong.'); return false; }
+        if (!collectRadio('client_subcategory_radio','__other__','subcat_other_input','subcatHidden'))
+            { showErr(2,'Pumili ng isang Sub-Kategorya.'); return false; }
+        if (!collectRadio('medical_cause_radio','__other__','medother_input','medCauseHidden'))
+            { showErr(2,'Pumili ng isang Medical Cause.'); return false; }
+        if (!collectRadio('assistance_type_radio','__other__','assist_other_input','assistHidden'))
+            { showErr(2,'Pumili ng isang Uri ng Tulong.'); return false; }
 
         document.getElementById('err2').classList.remove('show');
         return true;
     }
-
     return true;
 }
 
 function showErr(step, msg) {
-    const banner = document.getElementById('err' + step);
-    document.getElementById('err' + step + 'msg').textContent = msg;
-    banner.classList.add('show');
-    banner.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    document.getElementById('err'+step+'msg').textContent = msg;
+    const b = document.getElementById('err'+step);
+    b.classList.add('show');
+    b.scrollIntoView({ behavior:'smooth', block:'center' });
 }
 
-// ── Navigate steps ──
+/* ── Step navigation ── */
 function goStep(target) {
     if (target > currentStep && !validateStep(currentStep)) return;
 
-    // collect hidden values when leaving step 2
     if (currentStep === 2) {
-        collectRadio('client_subcategory_radio', '__other__', 'subcat_other_input', 'subcatHidden');
-        collectRadio('medical_cause_radio',      '__other__', 'medother_input',     'medCauseHidden');
-        collectRadio('assistance_type_radio',    '__other__', 'assist_other_input', 'assistHidden');
+        collectRadio('client_subcategory_radio','__other__','subcat_other_input','subcatHidden');
+        collectRadio('medical_cause_radio','__other__','medother_input','medCauseHidden');
+        collectRadio('assistance_type_radio','__other__','assist_other_input','assistHidden');
     }
 
     document.getElementById('step' + currentStep).classList.remove('active');
     currentStep = target;
     document.getElementById('step' + currentStep).classList.add('active');
-    document.getElementById('step' + currentStep).scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('step' + currentStep).scrollIntoView({ behavior:'smooth', block:'start' });
     updateProgress();
 }
 
 function updateProgress() {
     for (let i = 1; i <= 3; i++) {
         const el = document.getElementById('step-ind-' + i);
-        el.classList.remove('active', 'done');
+        el.classList.remove('active','done');
         if (i === currentStep) el.classList.add('active');
         else if (i < currentStep) el.classList.add('done');
     }
 }
 
-// ── Final submit check ──
-function beforeSubmit() {
-    // Recollect in case user went back
-    collectRadio('client_subcategory_radio', '__other__', 'subcat_other_input', 'subcatHidden');
-    collectRadio('medical_cause_radio',      '__other__', 'medother_input',     'medCauseHidden');
-    collectRadio('assistance_type_radio',    '__other__', 'assist_other_input', 'assistHidden');
-
-    const privacy = document.getElementById('privacyConsent');
-    if (!privacy.checked) {
-        showErr(3, 'Kailangan ninyong sumang-ayon sa Data Privacy Policy bago mag-submit.');
-        return false;
-    }
-    document.getElementById('submitBtn').disabled = true;
-    document.getElementById('submitBtn').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Isinusumite...';
-    return true;
-}
-
-// ── Handle form submit properly ──
+/* ── Final submit ── */
 document.getElementById('aicsForm').addEventListener('submit', function(e) {
-    if (!beforeSubmit()) {
+    /* Re-collect hidden values */
+    collectRadio('client_subcategory_radio','__other__','subcat_other_input','subcatHidden');
+    collectRadio('medical_cause_radio','__other__','medother_input','medCauseHidden');
+    collectRadio('assistance_type_radio','__other__','assist_other_input','assistHidden');
+
+    if (!document.getElementById('privacyConsent').checked) {
         e.preventDefault();
+        showErr(3,'Kailangan ninyong sumang-ayon sa Data Privacy Policy bago mag-submit.');
+        return;
     }
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Isinusumite...';
 });
 
-// ── Add family row ──
+/* ── Add family member row ── */
 function addFamilyRow() {
     const tbody = document.getElementById('familyBody');
     const tr = document.createElement('tr');
     tr.innerHTML = `
-        <td><input type="text" name="family_name[]" placeholder="Full name"></td>
+        <td><input type="text" name="family_name[]" placeholder="FULL NAME" autocapitalize="characters"></td>
         <td>
             <select name="family_relation[]">
                 <option value="">— Select —</option>
@@ -908,12 +910,18 @@ function addFamilyRow() {
             </select>
         </td>
         <td><input type="number" name="family_age[]" placeholder="Age" min="0" max="120"></td>
-        <td><input type="text" name="family_occupation[]" placeholder="Occupation"></td>
+        <td><input type="text" name="family_occupation[]" placeholder="OCCUPATION" autocapitalize="characters"></td>
         <td><input type="number" name="family_salary[]" placeholder="0.00" min="0" step="0.01"></td>`;
     tbody.appendChild(tr);
+
+    /* Apply uppercase listener to new text inputs */
+    tr.querySelectorAll('input[type="text"]').forEach(el => {
+        el.addEventListener('input', () => forceUpper(el));
+        el.addEventListener('blur',  () => forceUpper(el));
+    });
 }
 
-// Remove invalid class on input
+/* ── Clear invalid state on change ── */
 document.querySelectorAll('input, select').forEach(el => {
     el.addEventListener('change', () => el.classList.remove('invalid'));
     el.addEventListener('input',  () => el.classList.remove('invalid'));

@@ -15,7 +15,7 @@ ini_set('display_errors', 1);
 // =========================
 $host = 'localhost';
 $user = 'root';
-$pass = 'root';
+$pass = '';
 $db   = 'aics_dss'; 
 
 $conn = new mysqli($host, $user, $pass, $db);
@@ -166,8 +166,9 @@ $conn->close();
         @media print {
             .sidebar, .report-grid, .pool-row, .btn, .no-print { display: none !important; }
             .main { margin: 0; padding: 0; width: 100%; }
-            .section-box { box-shadow: none; border: 1px solid #eee; display: block !important; }
-            .signature-section { display: flex !important; }
+            .chart-container { display: block !important; }
+            .section-box { box-shadow: none; border: 1px solid #eee; display: block !important; margin-bottom: 30px; page-break-inside: avoid; }
+            .signature-section { display: flex !important; page-break-inside: avoid; }
             .header-area { border-bottom: 2px solid #000; }
         }
     </style>
@@ -277,6 +278,15 @@ const budgetData = <?php echo $chartData ?: '[]'; ?>;
 const causeLabels = <?php echo $medicalLabels ?: '[]'; ?>;
 const causeData = <?php echo $medicalCounts ?: '[]'; ?>;
 
+// =========================
+// INTERACTIVE SECTION FILTER
+// =========================
+function showSection(type) {
+    const section = document.getElementById('budgetSection');
+    if (section) {
+        section.scrollIntoView({ behavior: 'smooth' });
+    }
+}
 
 // =========================
 // GOV STYLE ANIMATION SETTINGS
@@ -297,6 +307,7 @@ if (budgetCanvas && budgetLabels.length > 0) {
         type: 'doughnut',
         data: {
             labels: budgetLabels,
+            boxWidth: 20,
             datasets: [{
                 data: budgetData,
                 backgroundColor: [

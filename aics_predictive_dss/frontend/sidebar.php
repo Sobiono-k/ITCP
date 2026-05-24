@@ -19,7 +19,7 @@ $pending_count = 0;
 
 $host = 'localhost';
 $user = 'root';
-$pass = 'root';
+$pass = '';
 $db   = 'aics_dss'; 
 
 $conn = new mysqli($host, $user, $pass, $db);
@@ -30,7 +30,7 @@ $conn = new mysqli($host, $user, $pass, $db);
         <div style="margin-bottom: -10px;">
             <img src="../images/dswdlogo.png" alt="QC Logo" style="width: 200px; height: auto; filter: drop-shadow(0 4px 6px rgba(43, 42, 42, 0.61));">
         </div>
-        <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 4px;">Batasan Hills Branch</div>
+        <div style="font-size: 0.65rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 4px;">Batasan Hills - Main Office</div>
     </div>
     
     <nav style="display: flex; flex-direction: column; flex-grow: 1; margin-top: 0px;">

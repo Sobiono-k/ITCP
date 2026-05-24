@@ -2,7 +2,7 @@
 // lookup_applicant.php
 require_once 'auth.php';
 
-$host = 'localhost'; $user = 'root'; $pass = 'root'; $db = 'aics_dss';
+$host = 'localhost'; $user = 'root'; $pass = ''; $db = 'aics_dss';
 $conn = new mysqli($host, $user, $pass, $db);
 if ($conn->connect_error) die("Connection error: " . $conn->connect_error);
 
@@ -81,6 +81,13 @@ $total_pages = ceil($total_count / $limit);
 $pending_res = $conn->query("SELECT * FROM pending_applications WHERE $where ORDER BY submitted_at DESC LIMIT $offset, $limit");
 $pending_rows = [];
 while ($r = $pending_res->fetch_assoc()) $pending_rows[] = $r;
+
+// ── Flag potential duplicates in the displayed list ──
+$name_counts = [];
+foreach ($pending_rows as $r) {
+    $key = strtolower(trim($r['fname'] . $r['lname'] . $r['birth_date']));
+    $name_counts[$key] = ($name_counts[$key] ?? 0) + 1;
+}
 
 function pgUrl($p) {
     $params = $_GET; $params['page'] = $p;
@@ -290,8 +297,12 @@ function pgUrl($p) {
                 <div style="font-size:11px; font-weight:800; color:#64748b; text-transform:uppercase; margin-bottom:6px;">
                     Enter or Scan Applicant Code
                 </div>
-                <input type="text" name="lookup_code" placeholder="AICS-20250522-XXXX"
-                       value="<?php echo htmlspecialchars($search_code); ?>" autocomplete="off" autofocus>
+                <input type="text" name="lookup_code" id="lookupCodeInput"
+                    placeholder="AICS-XXXXXXXX-XXXX"
+                    value="<?php echo htmlspecialchars($search_code); ?>"
+                    autocomplete="off" autofocus
+                    maxlength="18"
+                    style="text-transform:uppercase; letter-spacing:1px;">
             </div>
             <button type="submit" class="btn-search">
                 <i class="fas fa-search"></i> Search Code
@@ -340,10 +351,23 @@ function pgUrl($p) {
                             $bdate = (!empty($row['birth_date']) && $row['birth_date'] !== '0000-00-00')
                                 ? date("M d, Y", strtotime($row['birth_date'])) : '—';
                             $submitted = date("M d, Y g:i A", strtotime($row['submitted_at']));
+                            $dup_key    = strtolower(trim($row['fname'] . $row['lname'] . $row['birth_date']));
+                            $is_dup     = ($name_counts[$dup_key] ?? 0) > 1;    
                         ?>
                         <tr>
                             <td><span class="code-badge"><?php echo htmlspecialchars($row['application_code']); ?></span></td>
+                            <td style="font-weight:600; color:#1e293b;">
+                                <?php echo htmlspecialchars(ucwords(strtolower($fullname))); ?>
+                                <?php if ($is_dup): ?>
+                                    <span style="margin-left:6px;padding:2px 7px;background:#fef2f2;border:1px solid #fca5a5;
+                                                color:#b91c1c;font-size:10px;font-weight:800;border-radius:10px;
+                                                text-transform:uppercase;letter-spacing:.5px;">
+                                        <i class="fas fa-exclamation-circle"></i> Duplicate
+                                    </span>
+                                <?php endif; ?>
+                            </td>
                             <td style="font-weight:600; color:#1e293b;"><?php echo htmlspecialchars(ucwords(strtolower($fullname))); ?></td>
+                            
                             <td><?php echo $bdate; ?></td>
                             <td><?php echo htmlspecialchars($row['barangay'] ?? '—'); ?></td>
                             <td><span class="badge"><?php echo htmlspecialchars($row['medical_cause']); ?></span></td>
@@ -579,6 +603,23 @@ $qr_api   = "https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=10&
         </p>
     </div>
 </div>
+
+<script>
+document.getElementById('lookupCodeInput').addEventListener('input', function () {
+    let raw = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    let out = '';
+
+    // prefix: AICS
+    if (raw.length > 0)  out = raw.slice(0, Math.min(4, raw.length));
+    if (raw.length >= 4) out = 'AICS-' + raw.slice(4, Math.min(12, raw.length));
+    if (raw.length >= 12) out = 'AICS-' + raw.slice(4, 12) + '-' + raw.slice(12, 16);
+
+    // Keep cursor from jumping
+    const pos = this.selectionStart;
+    this.value = out;
+    try { this.setSelectionRange(pos, pos); } catch(e) {}
+});
+</script>
 
 </body>
 </html>

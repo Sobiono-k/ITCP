@@ -16,7 +16,7 @@ require_once 'auth.php';
 // 1. Database Configuration
 $host = 'localhost';
 $user = 'root';
-$pass = 'root';
+$pass = '';
 $db   = 'aics_dss'; 
 
 $conn = new mysqli($host, $user, $pass, $db);

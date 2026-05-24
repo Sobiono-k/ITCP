@@ -1,55 +1,62 @@
 <?php
 session_start();
 
-// 1. Establish Database Connection
 $host = 'localhost';
 $user = 'root';
-$pass = 'root'; 
-$db   = 'aics_dss'; // <-- Added the missing semicolon here!
+$pass = '';
+$db   = 'aics_dss'; 
 
 $conn = new mysqli($host, $user, $pass, $db);
-
 if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
+    die("Database Connection Error: " . $conn->connect_error);
 }
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $user = $_POST['username'];
-    $pass = $_POST['password'];
+    $user_input = trim($_POST['username']);
+    $pass_input = trim($_POST['password']);
+    
+    // Tinitingnan kung pinindot ang Remember Me checkbox
+    $remember = isset($_POST['remember']) ? true : false;
 
-    // 2. Use Prepared Statements for security
-    $stmt = $conn->prepare("SELECT id, role FROM users WHERE username = ? AND password = ?");
-    $stmt->bind_param("ss", $user, $pass);
+    $stmt = $conn->prepare("SELECT id, password, role FROM users WHERE username = ?");
+    $stmt->bind_param("s", $user_input);
     $stmt->execute();
     $result = $stmt->get_result();
 
     if ($result->num_rows === 1) {
         $row = $result->fetch_assoc();
         
-        // 3. SET THE SESSION DATA
-        $_SESSION['user_id'] = $row['id'];
-        $_SESSION['role'] = $row['role']; 
+        // Dynamic password match verification
+        if (password_verify($pass_input, $row['password'])) {
+            
+            $_SESSION['user_id'] = $row['id'];
+            $_SESSION['role'] = $row['role']; 
+            $_SESSION['username'] = $user_input;
 
-        // --- REMEMBER ME COOKIE LOGIC ---
-        if (isset($_POST['remember'])) {
-            // Store the username in a cookie that lasts for 30 days
-            // 86400 seconds = 1 day * 30 days
-            setcookie("remember_user", $user, time() + (86400 * 30), "/"); 
-        } else {
-            // If the box was NOT checked, clear the cookie immediately by expiring it in the past
-            setcookie("remember_user", "", time() - 3600, "/");
-        }
-        // ---------------------------------
+            // --- REMEMBER ME COOKIE HANDLING ---
+            if ($remember) {
+                // Sine-save ang username sa browser ng 30 araw (86400 segundo = 1 araw)
+                setcookie("remember_user", $user_input, time() + (86400 * 30), "/"); 
+            } else {
+                // Kung hindi naka-check, pinupuwersang i-expire ang cookie upang mabura sa browser
+                if (isset($_COOKIE['remember_user'])) {
+                    setcookie("remember_user", "", time() - 3600, "/");
+                }
+            }
 
-        // 4. Redirect based on role
-        if ($_SESSION['role'] === 'Admin') {
-            header("Location: index.php");
+            // Role redirection map
+            if ($_SESSION['role'] === 'Admin') {
+                header("Location: index.php");
+            } else {
+                header("Location: new_applicant.php");
+            }
+            exit();
+
         } else {
-            header("Location: new_applicant.php");
+            header("Location: login.php?error=invalid");
+            exit();
         }
-        exit();
     } else {
-        // Redirect back to login with error if credentials fail
         header("Location: login.php?error=invalid");
         exit();
     }

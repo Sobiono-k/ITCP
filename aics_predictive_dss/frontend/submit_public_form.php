@@ -10,25 +10,25 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     exit();
 }
 
-// ── Collect & sanitize ──
-$fname       = $conn->real_escape_string(trim($_POST['fname'] ?? ''));
-$mname       = $conn->real_escape_string(trim($_POST['mname'] ?? ''));
-$lname       = $conn->real_escape_string(trim($_POST['lname'] ?? ''));
+// ── Collect, Sanitize, and Force UPPERCASE ──
+$fname       = strtoupper($conn->real_escape_string(trim($_POST['fname'] ?? '')));
+$mname       = strtoupper($conn->real_escape_string(trim($_POST['mname'] ?? '')));
+$lname       = strtoupper($conn->real_escape_string(trim($_POST['lname'] ?? '')));
 $dob         = $conn->real_escape_string(trim($_POST['dob'] ?? ''));
-$sex         = $conn->real_escape_string(trim($_POST['sex'] ?? ''));
-$civil       = $conn->real_escape_string(trim($_POST['civil_status'] ?? 'Not Specified'));
-$barangay    = $conn->real_escape_string(trim($_POST['barangay'] ?? ''));
-$street      = $conn->real_escape_string(trim($_POST['street'] ?? ''));
+$sex         = strtoupper($conn->real_escape_string(trim($_POST['sex'] ?? '')));
+$civil       = strtoupper($conn->real_escape_string(trim($_POST['civil_status'] ?? 'NOT SPECIFIED')));
+$barangay    = strtoupper($conn->real_escape_string(trim($_POST['barangay'] ?? '')));
+$street      = strtoupper($conn->real_escape_string(trim($_POST['street'] ?? '')));
 $mobile      = $conn->real_escape_string(trim($_POST['cp_number'] ?? ''));
-$occupation  = $conn->real_escape_string(trim($_POST['occupation'] ?? ''));
+$occupation  = strtoupper($conn->real_escape_string(trim($_POST['occupation'] ?? '')));
 
-// Checkbox fields come as comma-separated strings (collected by JS into hidden inputs)
-$medical_cause   = $conn->real_escape_string(trim($_POST['medical_cause'] ?? ''));
-$assistance_type = $conn->real_escape_string(trim($_POST['assistance_type'] ?? ''));
-$client_cat      = $conn->real_escape_string(trim($_POST['client_category'] ?? ''));
-$client_subcat   = $conn->real_escape_string(trim($_POST['client_subcategory'] ?? ''));
+// Checkbox fields processed by JS into fields
+$medical_cause   = strtoupper($conn->real_escape_string(trim($_POST['medical_cause'] ?? '')));
+$assistance_type = strtoupper($conn->real_escape_string(trim($_POST['assistance_type'] ?? '')));
+$client_cat      = strtoupper($conn->real_escape_string(trim($_POST['client_category'] ?? '')));
+$client_subcat   = strtoupper($conn->real_escape_string(trim($_POST['client_subcategory'] ?? '')));
 
-// Family composition — encode as JSON
+// Family composition — encode as JSON and Force UPPERCASE inside data array
 $family_data = [];
 $names    = $_POST['family_name']       ?? [];
 $rels     = $_POST['family_relation']   ?? [];
@@ -39,11 +39,11 @@ $salaries = $_POST['family_salary']     ?? [];
 foreach ($names as $i => $name) {
     if (trim($name) !== '') {
         $family_data[] = [
-            'name'       => trim($name),
-            'relation'   => trim($rels[$i] ?? ''),
+            'name'       => strtoupper(trim($name)),
+            'relation'   => strtoupper(trim($rels[$i] ?? '')),
             'age'        => trim($ages[$i] ?? ''),
-            'occupation' => trim($occs[$i] ?? ''),
-            'salary'     => trim($salaries[$i] ?? ''),
+            'occupation' => strtoupper(trim($occs[$i] ?? '')),
+            'salary'     => trim($salaries[$i] ?? '0'),
         ];
     }
 }
@@ -51,20 +51,19 @@ $family_json = $conn->real_escape_string(json_encode($family_data));
 
 // Validate required fields server-side
 $errors = [];
-if (!$fname)        $errors[] = "First name is required.";
-if (!$lname)        $errors[] = "Last name is required.";
-if (!$dob)          $errors[] = "Birthdate is required.";
-if (!$sex)          $errors[] = "Sex is required.";
-if (!$civil)        $errors[] = "Civil status is required.";
-if (!$barangay)     $errors[] = "Barangay is required.";
-if (!$mobile)       $errors[] = "Mobile number is required.";
+if (!$fname)           $errors[] = "First name is required.";
+if (!$lname)           $errors[] = "Last name is required.";
+if (!$dob)             $errors[] = "Birthdate is required.";
+if (!$sex)             $errors[] = "Sex is required.";
+if (!$civil)           $errors[] = "Civil status is required.";
+if (!$barangay)        $errors[] = "Barangay is required.";
+if (!$mobile)          $errors[] = "Mobile number is required.";
 if (!$medical_cause)   $errors[] = "Medical cause is required.";
 if (!$assistance_type) $errors[] = "Type of assistance is required.";
 if (!$client_cat)      $errors[] = "Client category is required.";
 if (!$client_subcat)   $errors[] = "Client sub-category is required.";
 
 if (!empty($errors)) {
-    // Redirect back with error (in production, use session flash)
     header("Location: public_form.php?error=" . urlencode(implode(' | ', $errors)));
     exit();
 }
@@ -72,12 +71,36 @@ if (!empty($errors)) {
 // Generate unique application code: AICS-YYYYMMDD-XXXX
 $code = "AICS-" . date("Ymd") . "-" . strtoupper(substr(uniqid(), -4));
 
+// ── Duplicate guard: dynamic data checking routing ──
+$status = "PENDING"; // Default application routing state
+
+$dup_check = $conn->query("
+    SELECT id FROM pending_applications
+    WHERE is_claimed = 0
+      AND lname = '$lname'
+      AND fname = '$fname'
+      AND birth_date = '$dob'
+    LIMIT 1
+");
+
+$phone_check = $conn->query("
+    SELECT id FROM pending_applications
+    WHERE is_claimed = 0
+      AND cp_number = '$mobile'
+    LIMIT 1
+");
+
+// Kung may nahanap na katulad na Record, ipasok pa rin ngunit baguhin ang katayuan bilang Duplicate Pending
+if (($dup_check && $dup_check->num_rows > 0) || ($phone_check && $phone_check->num_rows > 0)) {
+    $status = "DUPLICATE PENDING";
+}
+
 $sql = "INSERT INTO pending_applications 
     (application_code, fname, mname, lname, birth_date, sex, civil_status,
-     barangay, medical_cause, assistance_type, client_category, client_subcategory, family_composition)
+     barangay, street, cp_number, occupation, medical_cause, assistance_type, client_category, client_subcategory, family_composition, status)
     VALUES 
     ('$code', '$fname', '$mname', '$lname', '$dob', '$sex', '$civil',
-     '$barangay', '$medical_cause', '$assistance_type', '$client_cat', '$client_subcat', '$family_json')";
+     '$barangay', '$street', '$mobile', '$occupation', '$medical_cause', '$assistance_type', '$client_cat', '$client_subcat', '$family_json', '$status')";
 
 if (!$conn->query($sql)) {
     die("Error saving application: " . $conn->error);
@@ -85,8 +108,7 @@ if (!$conn->query($sql)) {
 
 $conn->close();
 
-// ── Show success page with the code ──
-$fullname = ucwords(strtolower("$fname $lname"));
+$fullname = "$fname " . ($mname ? "$mname " : "") . $lname;
 $today    = date("F d, Y");
 ?>
 <!DOCTYPE html>
@@ -100,105 +122,31 @@ $today    = date("F d, Y");
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Inter', sans-serif; background: #eef2f7; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }
-
-        .card {
-            background: #fff;
-            max-width: 500px;
-            width: 100%;
-            border-radius: 14px;
-            overflow: hidden;
-            box-shadow: 0 8px 30px rgba(0,0,0,.12);
-        }
-
-        .card-top {
-            background: #003893;
-            padding: 28px 32px 22px;
-            text-align: center;
-            color: #fff;
-        }
-        .card-top .check-icon {
-            width: 64px; height: 64px;
-            background: #10b981;
-            border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 28px;
-            margin: 0 auto 14px;
-            box-shadow: 0 0 0 8px rgba(16,185,129,.2);
-        }
+        .card { background: #fff; max-width: 500px; width: 100%; border-radius: 14px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,.12); }
+        .card-top { background: #003893; padding: 28px 32px 22px; text-align: center; color: #fff; }
+        .card-top .check-icon { width: 64px; height: 64px; background: #10b981; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; margin: 0 auto 14px; box-shadow: 0 0 0 8px rgba(16,185,129,.2); }
         .card-top h2 { font-size: 20px; font-weight: 800; }
         .card-top p  { font-size: 12px; opacity: .75; margin-top: 4px; }
-
         .accent-bar { height: 4px; background: repeating-linear-gradient(90deg, #c8a94a 0, #c8a94a 20px, #ce1126 20px, #ce1126 40px); }
-
         .card-body { padding: 28px 32px; }
-
         .name-row { font-size: 15px; font-weight: 700; color: #1e293b; text-align: center; margin-bottom: 22px; }
-
-        .code-box {
-            background: #f0f4ff;
-            border: 2px solid #003893;
-            border-radius: 10px;
-            padding: 18px;
-            text-align: center;
-            margin-bottom: 22px;
-        }
+        .code-box { background: #f0f4ff; border: 2px solid #003893; border-radius: 10px; padding: 18px; text-align: center; margin-bottom: 22px; }
         .code-label { font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
-        .code-value {
-            font-family: 'Courier New', monospace;
-            font-size: 26px;
-            font-weight: 800;
-            color: #003893;
-            letter-spacing: 3px;
-        }
+        .code-value { font-family: 'Courier New', monospace; font-size: 26px; font-weight: 800; color: #003893; letter-spacing: 3px; }
         .code-date { font-size: 11px; color: #94a3b8; margin-top: 6px; }
-
-        .instruction {
-            background: #fef9ec;
-            border: 1px solid #f5c842;
-            border-radius: 8px;
-            padding: 14px 16px;
-            font-size: 12px;
-            color: #7c5c00;
-            line-height: 1.7;
-            margin-bottom: 22px;
-            display: flex;
-            gap: 10px;
-        }
+        .instruction { background: #fef9ec; border: 1px solid #f5c842; border-radius: 8px; padding: 14px 16px; font-size: 12px; color: #7c5c00; line-height: 1.7; margin-bottom: 22px; display: flex; gap: 10px; }
         .instruction i { font-size: 16px; flex-shrink: 0; margin-top: 2px; color: #d97706; }
-
         .steps-list { margin-bottom: 22px; }
-        .steps-list li {
-            display: flex; align-items: flex-start; gap: 12px;
-            font-size: 13px; color: #334155; padding: 8px 0;
-            border-bottom: 1px solid #f1f5f9;
-        }
+        .steps-list li { display: flex; align-items: flex-start; gap: 12px; font-size: 13px; color: #334155; padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
         .steps-list li:last-child { border-bottom: none; }
-        .step-num {
-            width: 24px; height: 24px;
-            background: #003893; color: #fff;
-            border-radius: 50%; font-size: 11px; font-weight: 800;
-            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-        }
-
-        .btn-print {
-            width: 100%;
-            padding: 14px;
-            background: #003893;
-            color: #fff;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 700;
-            cursor: pointer;
-            display: flex; align-items: center; justify-content: center; gap: 10px;
-            transition: .2s;
-        }
+        .step-num { width: 24px; height: 24px; background: #003893; color: #fff; border-radius: 50%; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .btn-print { width: 100%; padding: 14px; background: #003893; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: .2s; }
         .btn-print:hover { background: #002a6d; }
+        
+        /* Alert notification context style if system marked as duplicate */
+        .alert-duplicate { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; border-radius: 8px; padding: 12px; font-size: 12px; margin-bottom: 15px; }
 
-        @media print {
-            body { background: #fff; }
-            .btn-print { display: none; }
-        }
+        @media print { body { background: #fff; } .btn-print, .instruction { display: none; } }
     </style>
 </head>
 <body>
@@ -212,6 +160,12 @@ $today    = date("F d, Y");
     <div class="accent-bar"></div>
 
     <div class="card-body">
+
+        <?php if ($status === "DUPLICATE PENDING"): ?>
+            <div class="alert-duplicate">
+                <i class="fas fa-info-circle"></i> <strong>Paunawa:</strong> Ang system ay nakakita ng kahawig na pangalan o numero. Ang iyong aplikasyon ay dadaan sa masusing manual review ng Admin.
+            </div>
+        <?php endif; ?>
 
         <div class="name-row">
             <i class="fas fa-user-circle" style="color:#003893; margin-right:6px;"></i>
@@ -239,15 +193,11 @@ $today    = date("F d, Y");
             </li>
             <li>
                 <div class="step-num">2</div>
-                <span>Pumunta sa <strong>DSWD Batasan Hills Branch counter</strong></span>
+                <span>Pumunta sa pinakamalapit na <strong>DSWD AICS Processing Unit</strong></span>
             </li>
             <li>
                 <div class="step-num">3</div>
                 <span>Ipakita ang code sa staff para i-verify ang inyong impormasyon</span>
-            </li>
-            <li>
-                <div class="step-num">4</div>
-                <span>Mag-antay ng kumpirmasyon mula sa social worker</span>
             </li>
         </ul>
 
