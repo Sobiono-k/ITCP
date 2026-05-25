@@ -273,7 +273,7 @@ require_once 'auth.php';?>
                     <div style="font-weight: 800; font-size: 14px;">MEDICAL ASSISTANCE</div>
                     <div style="font-size: 11px; opacity: 0.9;">REQUIREMENTS LIST</div>
                 </div>
-                <button onclick="window.print()" class="print-btn" style="background: white; color: #3b82f6; border: none; padding: 5px 12px; border-radius: 4px; font-weight: 700; cursor: pointer; font-size: 11px;">
+                <button onclick="window.open('print_intake_form.php', '_blank')" class="print-btn" style="background: white; color: #3b82f6; border: none; padding: 5px 12px; border-radius: 4px; font-weight: 700; cursor: pointer; font-size: 11px;">
                     <i class="fas fa-print"></i> PRINT
                 </button>
             </div>

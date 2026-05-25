@@ -161,6 +161,145 @@ if (isset($_GET['action']) && $_GET['action'] === 'approve' && isset($_GET['id']
     exit();
 }
 
+// --- CSV IMPORT HANDLER ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import_csv'])) {
+    $import_errors = [];
+    $import_success = 0;
+    $import_skipped = 0;
+
+    if (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
+        header("Location: records.php?msg=csv_upload_error");
+        exit();
+    }
+
+    $file = $_FILES['csv_file']['tmp_name'];
+    $handle = fopen($file, 'r');
+
+    if ($handle === false) {
+        header("Location: records.php?msg=csv_upload_error");
+        exit();
+    }
+
+    // Read header row
+    $headers = fgetcsv($handle);
+    if (!$headers) {
+        fclose($handle);
+        header("Location: records.php?msg=csv_empty");
+        exit();
+    }
+
+    // Normalize headers: lowercase + trim
+    $headers = array_map(fn($h) => strtolower(trim($h)), $headers);
+
+    // Column mapping: CSV header → DB column
+    $column_map = [
+        'id_number'          => 'id_number',
+        'id number'          => 'id_number',
+        'request_date'       => 'request_date',
+        'request date'       => 'request_date',
+        'date'               => 'request_date',
+        'fname'              => 'fname',
+        'first name'         => 'fname',
+        'first_name'         => 'fname',
+        'mname'              => 'mname',
+        'middle name'        => 'mname',
+        'middle_name'        => 'mname',
+        'lname'              => 'lname',
+        'last name'          => 'lname',
+        'last_name'          => 'lname',
+        'barangay'           => 'barangay',
+        'brgy'               => 'barangay',
+        'birth_date'         => 'birth_date',
+        'birthdate'          => 'birth_date',
+        'birth date'         => 'birth_date',
+        'sex'                => 'sex',
+        'gender'             => 'sex',
+        'civil_status'       => 'civil_status',
+        'civil status'       => 'civil_status',
+        'medical_cause'      => 'medical_cause',
+        'medical cause'      => 'medical_cause',
+        'diagnosis'          => 'medical_cause',
+        'assistance_type'    => 'assistance_type',
+        'assistance type'    => 'assistance_type',
+        'type of assistance' => 'assistance_type',
+        'client_category'    => 'client_category',
+        'client category'    => 'client_category',
+        'category'           => 'client_category',
+        'client_subcategory' => 'client_subcategory',
+        'client subcategory' => 'client_subcategory',
+        'subcategory'        => 'client_subcategory',
+        'status'             => 'status',
+        'remarks'            => 'remarks',
+        'notes'              => 'remarks',
+    ];
+
+    // Map CSV column indices to DB columns
+    $col_index = [];
+    foreach ($headers as $i => $h) {
+        if (isset($column_map[$h])) {
+            $col_index[$column_map[$h]] = $i;
+        }
+    }
+
+    $stmt = $conn->prepare("INSERT INTO aics_sample_data 
+        (id_number, request_date, fname, mname, lname, barangay, birth_date, sex, civil_status, medical_cause, assistance_type, client_category, client_subcategory, status, remarks)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+
+    while (($row = fgetcsv($handle)) !== false) {
+        // Skip completely empty rows
+        if (empty(array_filter($row))) { $import_skipped++; continue; }
+
+        $get = fn($col) => isset($col_index[$col]) ? trim($row[$col_index[$col]] ?? '') : '';
+
+        $id_number    = $get('id_number')       ?: null;
+        $request_date = $get('request_date')    ?: date('Y-m-d');
+        // Auto-convert common date formats to YYYY-MM-DD
+        if ($request_date && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $request_date)) {
+            $parsed = date_create($request_date);
+            $request_date = $parsed ? date_format($parsed, 'Y-m-d') : date('Y-m-d');
+        }
+        $fname        = $get('fname')           ?: null;
+        $mname        = $get('mname')           ?: null;
+        $lname        = $get('lname')           ?: null;
+        $barangay     = $get('barangay')        ?: null;
+        $birth_date   = $get('birth_date')      ?: null;
+        if ($birth_date && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $birth_date)) {
+            $parsed = date_create($birth_date);
+            $birth_date = $parsed ? date_format($parsed, 'Y-m-d') : null;
+        }
+        $sex          = $get('sex')             ?: null;
+        $civil_status = $get('civil_status')    ?: null;
+        $medical_cause= $get('medical_cause')   ?: null;
+        $assist_type  = $get('assistance_type') ?: null;
+        $client_cat   = $get('client_category') ?: null;
+        $client_sub   = $get('client_subcategory') ?: null;
+        $status       = $get('status')          ?: 'Pending';
+        $remarks      = $get('remarks')         ?: null;
+
+        $stmt->bind_param("sssssssssssssss",
+            $id_number, $request_date, $fname, $mname, $lname,
+            $barangay, $birth_date, $sex, $civil_status,
+            $medical_cause, $assist_type, $client_cat, $client_sub,
+            $status, $remarks
+        );
+
+        if ($stmt->execute()) {
+            $import_success++;
+            // Log import in audit trail
+            $new_id = $conn->insert_id;
+            $conn->query("INSERT INTO audit_logs (record_id, action_type, changed_column, new_value) VALUES ($new_id, 'INSERT', 'csv_import', 'Imported via CSV')");
+        } else {
+            $import_skipped++;
+        }
+    }
+
+    fclose($handle);
+    $stmt->close();
+
+    header("Location: records.php?msg=csv_imported&imported=$import_success&skipped=$import_skipped");
+    exit();
+}
+
 // 2. Pagination Configuration
 $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 20; 
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
@@ -218,7 +357,7 @@ $excel_url = "records.php?" . http_build_query(array_merge($_GET, ['action' => '
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DSWD AICS - All Records</title>
+    <title>Records - DSWD</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -304,6 +443,9 @@ $excel_url = "records.php?" . http_build_query(array_merge($_GET, ['action' => '
             if($_GET['msg'] == 'updated') echo "Record updated successfully!";
             elseif($_GET['msg'] == 'success') echo "Action completed!";
             elseif($_GET['msg'] == 'auth_failed') echo "Invalid Admin Credentials!";
+            elseif($_GET['msg'] == 'csv_imported') echo "CSV Import complete — " . (int)($_GET['imported'] ?? 0) . " records added" . ((int)($_GET['skipped'] ?? 0) > 0 ? ", " . (int)$_GET['skipped'] . " skipped" : "") . ".";
+            elseif($_GET['msg'] == 'csv_upload_error') echo "CSV upload failed. Please try again.";
+            elseif($_GET['msg'] == 'csv_empty') echo "The uploaded CSV file appears to be empty.";
         ?>
     </div>
     <script>setTimeout(() => { document.getElementById('toast').style.display = 'none'; }, 3000);</script>
@@ -322,6 +464,10 @@ $excel_url = "records.php?" . http_build_query(array_merge($_GET, ['action' => '
                 <a href="records.php?action=find_duplicates" class="btn-duplicate">
                     <i class="fas fa-copy"></i> Find Duplicates
                 </a>
+
+                <button type="button" onclick="openImportModal()" class="btn-excel" style="background:#16a34a;">
+                    <i class="fas fa-file-csv"></i> Import CSV
+                </button>
 
                 <div style="display: flex; gap: 10px;">
                     <a href="<?php echo $excel_url; ?>" class="btn-excel">
@@ -653,5 +799,131 @@ window.onclick = function(event) {
     }
 }
 </script>
+<!-- CSV IMPORT MODAL -->
+<div id="importModal" class="modal-overlay">
+    <div class="modal-box" style="width: 520px; max-width: 95vw;">
+        <h2 style="margin-top:0; display:flex; align-items:center; gap:10px;">
+            <span style="background:#dcfce7; color:#16a34a; width:36px; height:36px; border-radius:8px; display:flex; align-items:center; justify-content:center;">
+                <i class="fas fa-file-csv"></i>
+            </span>
+            Import Records from CSV
+        </h2>
+        <p style="color:#64748b; font-size:13px; margin-bottom:18px;">Upload a <strong>.csv file</strong> to bulk-import beneficiary records. New records are added — existing ones are not modified.</p>
+
+        <!-- Column guide -->
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px; margin-bottom:18px; font-size:12px;">
+            <div style="font-weight:700; color:#334155; margin-bottom:8px; text-transform:uppercase; letter-spacing:.05em; font-size:11px;">
+                <i class="fas fa-table" style="color:#3b82f6; margin-right:5px;"></i> Accepted Column Headers
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 16px; color:#64748b; line-height:1.8;">
+                <span><code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">id_number</code> or <code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">id number</code></span>
+                <span><code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">request_date</code> or <code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">date</code></span>
+                <span><code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">fname</code>, <code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">mname</code>, <code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">lname</code></span>
+                <span><code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">barangay</code> or <code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">brgy</code></span>
+                <span><code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">birth_date</code> or <code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">birthdate</code></span>
+                <span><code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">sex</code> or <code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">gender</code></span>
+                <span><code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">civil_status</code> / <code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">civil status</code></span>
+                <span><code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">medical_cause</code> / <code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">diagnosis</code></span>
+                <span><code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">assistance_type</code></span>
+                <span><code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">client_category</code> / <code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">category</code></span>
+                <span><code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">client_subcategory</code></span>
+                <span><code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">status</code></span>
+                <span><code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">remarks</code> or <code style="background:#e2e8f0; padding:1px 5px; border-radius:3px; color:#334155;">notes</code></span>
+            </div>
+            <div style="margin-top:10px; padding-top:10px; border-top:1px solid #e2e8f0; color:#94a3b8; font-size:11px;">
+                <i class="fas fa-info-circle" style="color:#3b82f6;"></i>
+                Column names are <strong>case-insensitive</strong>. Dates should be <strong>YYYY-MM-DD</strong> or common formats (MM/DD/YYYY, etc.). Missing <em>status</em> defaults to <strong>Pending</strong>.
+            </div>
+        </div>
+
+        <form method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="import_csv" value="1">
+
+            <!-- File drop zone -->
+            <div id="dropZone" style="border:2px dashed #cbd5e1; border-radius:10px; padding:28px; text-align:center; cursor:pointer; transition:0.2s; background:#fafafa; margin-bottom:16px;"
+                 onclick="document.getElementById('csvFileInput').click()"
+                 ondragover="event.preventDefault(); this.style.borderColor='#3b82f6'; this.style.background='#eff6ff';"
+                 ondragleave="this.style.borderColor='#cbd5e1'; this.style.background='#fafafa';"
+                 ondrop="handleDrop(event)">
+                <i class="fas fa-cloud-upload-alt" style="font-size:32px; color:#94a3b8; display:block; margin-bottom:8px;"></i>
+                <div style="font-weight:600; color:#334155; font-size:14px;">Click or drag & drop your CSV file here</div>
+                <div id="dropZoneFileName" style="color:#94a3b8; font-size:12px; margin-top:4px;">Only .csv files are accepted</div>
+            </div>
+            <input type="file" id="csvFileInput" name="csv_file" accept=".csv" style="display:none;" onchange="updateFileName(this)">
+
+            <?php if($_SESSION['role'] === 'Staff'): ?>
+            <div style="background: #fff1f2; padding: 15px; border-radius: 8px; border: 1px solid #fecaca; margin-bottom: 16px;">
+                <label style="font-size:11px; color:#e11d48; font-weight:700;"><i class="fas fa-user-shield"></i> ADMIN AUTHORIZATION REQUIRED</label>
+                <input type="password" name="admin_pass_import" class="modal-input" placeholder="Enter Admin Password" required style="margin-top:6px;">
+            </div>
+            <?php endif; ?>
+
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:4px;">
+                <button type="button" onclick="closeImportModal()" class="action-btn" style="padding:10px 18px; font-size:13px;">Cancel</button>
+                <button type="submit" id="importSubmitBtn" disabled
+                    style="background:#16a34a; color:#fff; border:none; padding:10px 22px; border-radius:8px; cursor:pointer; font-weight:600; font-size:14px; opacity:0.5; transition:0.2s;"
+                    onclick="this.innerHTML='<i class=\'fas fa-spinner fa-spin\'></i> Importing…'; this.disabled=true; this.closest(\'form\').submit();">
+                    <i class="fas fa-upload"></i> Import Records
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openImportModal() {
+    document.getElementById('importModal').style.display = 'block';
+}
+function closeImportModal() {
+    document.getElementById('importModal').style.display = 'none';
+    // Reset state
+    document.getElementById('csvFileInput').value = '';
+    document.getElementById('dropZoneFileName').textContent = 'Only .csv files are accepted';
+    document.getElementById('dropZone').style.borderColor = '#cbd5e1';
+    document.getElementById('dropZone').style.background = '#fafafa';
+    const btn = document.getElementById('importSubmitBtn');
+    btn.disabled = true;
+    btn.style.opacity = '0.5';
+}
+
+function updateFileName(input) {
+    const btn = document.getElementById('importSubmitBtn');
+    if (input.files && input.files.length > 0) {
+        const name = input.files[0].name;
+        if (!name.toLowerCase().endsWith('.csv')) {
+            document.getElementById('dropZoneFileName').textContent = '⚠ Please select a .csv file only.';
+            document.getElementById('dropZone').style.borderColor = '#ef4444';
+            btn.disabled = true; btn.style.opacity = '0.5';
+            return;
+        }
+        document.getElementById('dropZoneFileName').textContent = '✓ ' + name;
+        document.getElementById('dropZone').style.borderColor = '#16a34a';
+        document.getElementById('dropZone').style.background = '#f0fdf4';
+        btn.disabled = false; btn.style.opacity = '1';
+    }
+}
+
+function handleDrop(event) {
+    event.preventDefault();
+    document.getElementById('dropZone').style.borderColor = '#cbd5e1';
+    document.getElementById('dropZone').style.background = '#fafafa';
+    const files = event.dataTransfer.files;
+    if (files.length > 0) {
+        const input = document.getElementById('csvFileInput');
+        // Assign dropped file to the input
+        const dt = new DataTransfer();
+        dt.items.add(files[0]);
+        input.files = dt.files;
+        updateFileName(input);
+    }
+}
+
+// Close import modal on outside click
+window.addEventListener('click', function(event) {
+    const importModal = document.getElementById('importModal');
+    if (event.target === importModal) closeImportModal();
+});
+</script>
+
 </body>
 </html>

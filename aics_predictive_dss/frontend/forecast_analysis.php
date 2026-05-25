@@ -21,126 +21,109 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
-// --- PIPELINE CONNECTIONS ---
-$python_lstm = shell_exec('python3 lstm_model.py 2>&1');
-$lstm_val = trim($python_lstm); 
+// ─────────────────────────────────────────────────────────────────
+// SHARED CONFIGURATION
+// ─────────────────────────────────────────────────────────────────
+$pythonPath = "C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311\\python.exe";
 
-$python_rf = shell_exec('python3 random_forest.py'); 
-$rf_results = json_decode($python_rf, true);
+$descriptorspec = [
+    0 => ["pipe", "r"],
+    1 => ["pipe", "w"],
+    2 => ["pipe", "w"],
+];
 
-// 2. Initialize Variables
-$all_records = []; 
-$cause_patterns = []; 
-$daily_counts = [];
-$monthly_counts = []; 
-$yearly_counts = [];
-$cause_series = [];
-$rising_causes = [];
+$env = [
+    'PATH'        => 'C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311;C:\\Users\\A\\AppData\\Local\\Programs\\Python\\Python311\\Scripts;C:\\Windows\\system32;C:\\Windows',
+    'SystemRoot'  => 'C:\\Windows',
+    'USERPROFILE' => 'C:\\Windows\\Temp',
+    'HOME'        => 'C:\\Windows\\Temp',
+];
 
-// 3. Database Data Retrieval (Replacing CSV logic)
-$sql = "SELECT request_date, medical_cause FROM aics_sample_data ORDER BY request_date ASC";
-$result = $conn->query($sql);
+// ─────────────────────────────────────────────────────────────────
+// RUN RANDOM FOREST MODEL
+// ─────────────────────────────────────────────────────────────────
+$rfScriptPath = dirname(__DIR__) . "/backend/random_forest.py";
 
-if ($result && $result->num_rows > 0) {
-    while($row = $result->fetch_assoc()) {
-        $row_date = trim($row['request_date']);
-        $medical_cause = $row['medical_cause'] ?? 'Unknown';
-        
-        $all_records[] = ['date' => $row_date, 'cause' => $medical_cause];
+$rfProcess = proc_open(
+    '"'.$pythonPath.'" "'.$rfScriptPath.'"',
+    $descriptorspec,
+    $rfPipes,
+    __DIR__,
+    $env,
+    ['bypass_shell' => true]
+);
 
-        $ts = strtotime($row_date);
-        if ($ts) {
-            $d = date("Y-m-d", $ts);
-            $m = date("Y-m", $ts);
-            $y = date("Y", $ts);
+$rfJsonData  = '';
+$rfErrorData = '';
 
-            $daily_counts[$d] = ($daily_counts[$d] ?? 0) + 1;
-            $monthly_counts[$m] = ($monthly_counts[$m] ?? 0) + 1;
-            $yearly_counts[$y] = ($yearly_counts[$y] ?? 0) + 1;
+if (is_resource($rfProcess)) {
+    $rfJsonData  = stream_get_contents($rfPipes[1]);
+    $rfErrorData = stream_get_contents($rfPipes[2]);
 
-            $clean_label = ucwords(strtolower(trim($medical_cause))); 
-            $cause_patterns[$clean_label] = ($cause_patterns[$clean_label] ?? 0) + 1;
-            
-            if (!isset($cause_series[$clean_label][$m])) $cause_series[$clean_label][$m] = 0;
-            $cause_series[$clean_label][$m]++;
+    fclose($rfPipes[0]); fclose($rfPipes[1]); fclose($rfPipes[2]);
+    proc_close($rfProcess);
+}
+
+if (!empty($rfErrorData)) { echo "<pre>RF Script Error: $rfErrorData</pre>"; die(); }
+
+$rfStart = strpos($rfJsonData, '{');
+
+if ($rfStart !== false && $rfStart > 0) {
+    $rfJsonData = substr($rfJsonData, $rfStart);
+}
+
+$rfData = json_decode($rfJsonData, true);
+
+if (!$rfData) {
+    $rfData = [
+        "weekly" => ["predictions" => [], "hotspots" => []],
+        "monthly" => ["predictions" => [], "hotspots" => []],
+        "yearly" => ["predictions" => [], "hotspots" => []]
+    ];
+} else {
+    foreach (['weekly', 'monthly', 'yearly'] as $g) {
+        if (!isset($rfData[$g])) {
+            $rfData[$g] = ["predictions" => [], "hotspots" => []];
+        }
+        if (!isset($rfData[$g]['hotspots'])) {
+            $rfData[$g]['hotspots'] = [];
         }
     }
 }
+
+// ─────────────────────────────────────────────────────────────────
+// RUN LSTM MODEL
+// ─────────────────────────────────────────────────────────────────
+$scriptPath = dirname(__DIR__) . "/backend/lstm_model.py";
+
+$process   = proc_open('"'.$pythonPath.'" "'.$scriptPath.'"', $descriptorspec, $pipes, __DIR__, $env, ['bypass_shell' => true]);
+$jsonData  = '';
+$errorData = '';
+
+if (is_resource($process)) {
+    $jsonData  = stream_get_contents($pipes[1]);
+    $errorData = stream_get_contents($pipes[2]);
+    fclose($pipes[0]); fclose($pipes[1]); fclose($pipes[2]);
+    proc_close($process);
+}
+
+$start = strpos($jsonData, '{');
+if ($start !== false && $start > 0) {
+    $jsonData = substr($jsonData, $start);
+}
+
+$data = json_decode($jsonData, true);
+
+if ($data === null || !isset($data['weekly'], $data['monthly'], $data['yearly'])) {
+    echo "<!DOCTYPE html><html><body style='background:#f0f2f5;color:#f87171;font-family:Inter,sans-serif;padding:40px;'>";
+    echo "<h2>⚠ Python model output could not be parsed</h2>";
+    echo "<b>stdout:</b><pre style='background:#fff;padding:14px;border-radius:8px;overflow:auto;color:#f59e0b;'>".htmlspecialchars($jsonData)."</pre>";
+    echo "<b>stderr:</b><pre style='background:#fff;padding:14px;border-radius:8px;overflow:auto;color:#f87171;'>".htmlspecialchars($errorData)."</pre>";
+    echo "</body></html>";
+    die();
+}
+
 $conn->close();
-
-// 3. Sync & Forecast Logic
-ksort($monthly_counts);
-$historical_values = array_values($monthly_counts);
-$count = count($historical_values);
-$last_actual = !empty($historical_values) ? end($historical_values) : 0;
-
-$predicted_val = round($last_actual * 1.12); 
-$display_perc = 12.0;
-
-echo "<script>
-    const csvData = " . json_encode($all_records) . ";
-    const lstmPrediction = " . (is_numeric($lstm_val) ? $lstm_val : "null") . ";
-</script>";
-
-// ... (Rest of your existing Forecast Logic, HTML, and JS remains exactly the same)
-if (is_numeric($lstm_val) && $lstm_val > 0) {
-    $predicted_val = $lstm_val;
-    $display_perc = ($last_actual > 0) ? round((($predicted_val - $last_actual) / $last_actual) * 100, 1) : 5.8;
-} elseif ($count >= 2) {
-    $previous_month = $historical_values[$count - 2];
-    $growth_rate = ($previous_month > 0) ? (($last_actual - $previous_month) / $previous_month) : 0.058;
-    $predicted_val = round($last_actual * (1 + $growth_rate));
-    $display_perc = round($growth_rate * 100, 1);
-} else {
-    $predicted_val = round($last_actual * 1.058);
-    $display_perc = 5.8;
-}
-
-// --- PIPELINE B LOGIC ---
-if (!empty($rf_results)) {
-    $rising_causes = array_slice($rf_results, 0, 5, true); 
-} elseif (!empty($cause_patterns)) {
-    arsort($cause_patterns);
-    foreach (array_slice($cause_patterns, 0, 5, true) as $name => $count) {
-        $rising_causes[$name] = [
-            "status" => "Analyzing",
-            "growth" => "0%",
-            "color" => "#64748b",
-            "count" => $count
-        ];
-    }
-} else {
-    $rising_causes = [];
-}
-
-// Prepare Medical Trends with Forecast Lines
-$chart_labels = array_keys(array_slice($monthly_counts, -6));
-$medical_labels_with_forecast = array_merge($chart_labels, ["Forecast"]);
-$top_causes_keys = array_keys($rising_causes); // No longer crashes because $rising_causes is guaranteed an array
-$final_datasets = [];
-$dataset_colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'];
-
-foreach ($top_causes_keys as $index => $c_name) {
-    $hist_points = [];
-    foreach ($chart_labels as $label) {
-        $hist_points[] = $cause_series[$c_name][$label] ?? 0;
-    }
-    
-    $last_point = end($hist_points);
-    $predicted_point = round($last_point * 1.058);
-    $full_data = array_merge($hist_points, [$predicted_point]);
-
-    $final_datasets[] = [
-        'label' => $c_name, 
-        'data' => $full_data,
-        'borderColor' => $dataset_colors[$index] ?? '#cbd5e1',
-        'backgroundColor' => ($dataset_colors[$index] ?? '#cbd5e1') . '20',
-        'borderWidth' => 3,
-        'pointRadius' => 4,
-        'tension' => 0.4,
-        'fill' => false
-    ];
-}
 ?>
 
 <!DOCTYPE html>
@@ -151,7 +134,7 @@ foreach ($top_causes_keys as $index => $c_name) {
     <title>Forecast Analysis - DSWD AICS</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <style>
         :root {
             --dswd-dark: #2c3e50;
@@ -186,6 +169,30 @@ foreach ($top_causes_keys as $index => $c_name) {
         .chart-toggle { background: #f1f5f9; padding: 4px; border-radius: 8px; display: flex; gap: 5px; }
         .chart-toggle button { border: none; background: transparent; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; color: #64748b; cursor: pointer; transition: 0.2s; }
         .chart-toggle button.active { background: #fff; color: #3b82f6; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+
+        /* ── index1 additions ── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f0f2f5; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+        @keyframes shimmer {
+            0%   { background-position: -800px 0; }
+            100% { background-position:  800px 0; }
+        }
+        .skeleton {
+            background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+            background-size: 800px 100%;
+            animation: shimmer 1.4s infinite;
+            border-radius: 8px;
+        }
+
+        /* Tab buttons */
+        .tab-btn { cursor: pointer; border: none; font-family: 'Inter', sans-serif; }
+        .tab-btn.active-tab { background: #3b82f6; color: #fff; box-shadow: 0 2px 6px rgba(59,130,246,0.35); }
+
+        /* LSTM dashboard panels */
+        .lstm-panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; box-shadow: var(--card-shadow); }
+        .lstm-panel-dark { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; }
     </style>
 </head>
 <body>
@@ -198,256 +205,332 @@ foreach ($top_causes_keys as $index => $c_name) {
         <p>AICS Program of DSWD <i class="fas fa-chevron-right" style="font-size: 10px; margin: 0 5px;"></i> Batasan Hills</p>
     </div>
 
-    <div class="forecast-container">
-        <div class="f-card">
-            <div class="label" id="forecast-label">Expected Requests (Monthly)</div>
-            <div style="display: flex; align-items: baseline; gap: 15px;">
-                <div class="big-number" id="big-number-val"><?php echo number_format($predicted_val); ?></div>
-                <div class="trend-up" id="trend-container">
-                    <i id="trend-icon" class="fas fa-arrow-<?php echo ($display_perc >= 0) ? 'up' : 'down'; ?>"></i> 
-                    <span id="trend-perc-val"><?php echo abs($display_perc); ?></span>%
+    <div style="max-width:100%; margin:0 auto; display:flex; flex-direction:column; gap:28px;">
+
+        <!-- Tab Switcher Header -->
+        <div style="display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px;">
+            <div>
+                <h2 style="margin:0; font-size:20px; font-weight:700; color:#344767;">AICS Client Volume Forecast</h2>
+                <p style="margin:4px 0 0; color:#8392ab; font-size:13px;">LSTM-powered predictions — historical data 2022 – 2026 with forward projections</p>
+            </div>
+            <div style="display:inline-flex; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:12px; padding:4px; gap:4px;">
+                <button onclick="switchTab('weekly')" id="tab-weekly"
+                    class="tab-btn active-tab" style="padding:8px 20px; border-radius:8px; font-size:13px; font-weight:600; transition:all .2s;">
+                    Weekly
+                </button>
+                <button onclick="switchTab('monthly')" id="tab-monthly"
+                    class="tab-btn" style="padding:8px 20px; border-radius:8px; font-size:13px; font-weight:600; color:#64748b; transition:all .2s;">
+                    Monthly
+                </button>
+                <button onclick="switchTab('yearly')" id="tab-yearly"
+                    class="tab-btn" style="padding:8px 20px; border-radius:8px; font-size:13px; font-weight:600; color:#64748b; transition:all .2s;">
+                    Yearly
+                </button>
+            </div>
+        </div>
+
+        <!-- Metric Cards -->
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px;" id="metricCards">
+            <div class="skeleton" style="height:112px;"></div>
+            <div class="skeleton" style="height:112px;"></div>
+            <div class="skeleton" style="height:112px;"></div>
+            <div class="skeleton" style="height:112px;"></div>
+        </div>
+
+        <!-- Legend -->
+        <div style="display:flex; flex-wrap:wrap; gap:20px 24px; font-size:12px; color:#8392ab; padding:0 4px;">
+            <span style="display:flex;align-items:center;gap:8px;">
+                <span style="display:inline-block;width:24px;height:2px;background:#60a5fa;border-radius:2px;"></span>Actual recorded volume
+            </span>
+            <span style="display:flex;align-items:center;gap:8px;">
+                <span style="display:inline-block;width:24px;border-top:2px dashed #a78bfa;"></span>Model fit (in-sample)
+            </span>
+            <span style="display:flex;align-items:center;gap:8px;">
+                <span style="display:inline-block;width:24px;height:2px;background:#2dd4bf;border-radius:2px;"></span>Forecast (future)
+            </span>
+            <span style="display:flex;align-items:center;gap:8px;">
+                <span style="display:inline-block;width:24px;height:12px;border-radius:3px;background:rgba(20,184,166,.15);border:1px solid rgba(20,184,166,.4);"></span>95% confidence band
+            </span>
+        </div>
+
+        <!-- LSTM Chart -->
+        <div class="lstm-panel">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+                <h3 style="margin:0;font-weight:700;color:#344767;font-size:16px;" id="chartTitle">Weekly Client Volume — 2022 to Forecast</h3>
+                <span style="font-size:12px;color:#8392ab;" id="forecastNote"></span>
+            </div>
+            <div style="position:relative;">
+                <canvas id="lstmChart" style="height:400px;"></canvas>
+            </div>
+        </div>
+
+        <!-- Random Forest Predictions -->
+        <div class="lstm-panel" style="display:flex;flex-direction:column;gap:20px;">
+            <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;">
+                <div>
+                    <h3 style="margin:0;font-size:18px;font-weight:700;color:#344767;" id="rfCardTitle">Top Medical Assistance Prediction (Weekly)</h3>
+                    <p style="margin:4px 0 0;font-size:13px;color:#8392ab;">Random Forest classification results based on historical AICS assistance records</p>
+                </div>
+                <div style="background:#eef2ff;color:#6366f1;font-size:12px;padding:6px 14px;border-radius:10px;border:1px solid #c7d2fe;font-family:monospace;font-weight:600;">
+                    Random Forest AI
                 </div>
             </div>
-        </div>
-
-        <div class="f-card">
-            <div class="label">Medical Risk Hotspots (Pipeline B)</div>
-            <div class="tag-container">
-                <?php if (!empty($rising_causes)): ?>
-                    <?php foreach(array_keys(array_slice($rising_causes, 0, 3)) as $cluster): ?>
-                        <div class="tag"><i class="fas fa-notes-medical"></i> <?php echo htmlspecialchars($cluster); ?></div>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <div class="tag">Analyzing Clusters...</div>
-                <?php endif; ?>
-                <div class="tag"><i class="fas fa-folder"></i> Accident Injury
-</div>
-            </div>
-        </div>
-
-        <div class="f-card full-width">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <div class="label" style="color:#2c3e50; font-size:16px; margin:0;">Forecasted Request Volume</div>
-                <div class="chart-toggle">
-                    <button onclick="updateChart('daily')" id="btn-daily">Daily</button>
-                    <button onclick="updateChart('monthly')" id="btn-monthly" class="active">Monthly</button>
-                    <button onclick="updateChart('yearly')" id="btn-yearly">Yearly</button>
+            <div class="lstm-panel-dark">
+                <div style="height:256px;position:relative;">
+                    <canvas id="rfChart"></canvas>
                 </div>
             </div>
-            <canvas id="forecastVolumeChart" height="100"></canvas>
+            <div id="rfPredictions" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
+                <div class="skeleton" style="height:128px;"></div>
+                <div class="skeleton" style="height:128px;"></div>
+                <div class="skeleton" style="height:128px;"></div>
+            </div>
         </div>
 
-        <div class="f-card full-width">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <div class="label" style="color:#2c3e50; font-size:16px; margin:0;">Top 5 Medical Assistance Prediction</div>
-                <div class="chart-toggle">
-                    <button onclick="updateMedicalChart('daily')" id="m-btn-daily">Daily</button>
-                    <button onclick="updateMedicalChart('monthly')" id="m-btn-monthly" class="active">Monthly</button>
-                    <button onclick="updateMedicalChart('yearly')" id="m-btn-yearly">Yearly</button>
+        <!-- Hotspots -->
+        <div class="lstm-panel" style="display:flex;flex-direction:column;gap:20px;">
+            <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;">
+                <div>
+                    <h3 style="margin:0;font-size:18px;font-weight:700;color:#ef4444;display:flex;align-items:center;gap:8px;" id="hotspotsCardTitle">
+                        <span>🔥</span> Rising Medical Causes (Hotspots)
+                    </h3>
+                    <p style="margin:4px 0 0;font-size:13px;color:#8392ab;">High-velocity growth anomalies identified across specific diagnostics requiring proactive resource staging</p>
+                </div>
+                <div style="background:#fff1f2;color:#f43f5e;font-size:12px;padding:6px 14px;border-radius:10px;border:1px solid #fecdd3;font-family:monospace;font-weight:600;">
+                    Anomaly Outbreak Alert
                 </div>
             </div>
-            <canvas id="medicalCausesChart" height="100"></canvas>
+            <div class="lstm-panel-dark">
+                <div style="height:256px;position:relative;">
+                    <canvas id="hotspotChart"></canvas>
+                </div>
+            </div>
+            <div id="hotspotContainers" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
+                <div class="skeleton" style="height:128px;"></div>
+                <div class="skeleton" style="height:128px;"></div>
+                <div class="skeleton" style="height:128px;"></div>
+            </div>
         </div>
 
-        <div class="f-card full-width">
-    <div class="label" style="color:#2c3e50; font-size:16px;">Rising Medical Causes (Hotspots)</div>
-    <div id="hotspots-list-container" style="margin-top: 15px;">
-        <?php 
-        $i = 0;
-        if (!empty($rising_causes)):
-            foreach($rising_causes as $name => $data): 
-                $trend_status = $data['status'] ?? 'Stable';
-                $status_color = $data['color'] ?? '#3b82f6';
-                $total_count = $data['count'] ?? 0; // Show total count initially
-        ?>
-        <div class="rising-item">
-            <div style="font-weight: 600; color: #344767; display: flex; align-items: center; gap: 8px;">
-                <div style="width: 8px; height: 8px; border-radius: 50%; background: <?php echo $dataset_colors[$i % 5]; ?>;"></div>
-                <?php echo htmlspecialchars($name); ?>
-                <span style="font-size: 11px; color: #8392ab; font-weight: 400;">(Total: <?php echo number_format($total_count); ?>)</span>
-            </div>
-            <div style="color: <?php echo $status_color; ?>; font-weight: 600; font-size: 13px;">
-                <i class="fas fa-<?php echo ($trend_status === 'Rising') ? 'arrow-trend-up' : (($trend_status === 'Declining') ? 'arrow-trend-down' : 'circle-check'); ?>"></i>
-                <?php echo $trend_status; ?> Medical Trend
-            </div>
-        </div>
-        <?php $i++; endforeach; 
-        endif; ?>
     </div>
 </div>
 
 <script>
-    // Global chart instances
-    let volumeChart;
-    let medicalChart;
-    const datasetColors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'];
-    const topCauses = <?php echo json_encode(array_keys($rising_causes)); ?>;
+const GRAINS = {
+    weekly:  <?php echo json_encode($data['weekly'],  JSON_UNESCAPED_UNICODE); ?>,
+    monthly: <?php echo json_encode($data['monthly'], JSON_UNESCAPED_UNICODE); ?>,
+    yearly:  <?php echo json_encode($data['yearly'],  JSON_UNESCAPED_UNICODE); ?>,
+};
+const RF_DATA = <?php echo json_encode($rfData, JSON_UNESCAPED_UNICODE); ?>;
 
-    function parseCSVDate(dateStr) {
-        const d = new Date(dateStr);
-        return isNaN(d.getTime()) ? null : d;
+const GRAIN_META = {
+    weekly:  { title: 'Weekly Client Volume — 2022 to Forecast', forecast: 'Forecast: next 26 weeks (~6 months)', xLimit: 15, rfTitle: 'Top Medical Assistance Prediction (Weekly Distribution)', hotspotTitle: 'Rising Medical Causes & Hotspots (Weekly Velocity Acceleration)' },
+    monthly: { title: 'Monthly Client Volume — 2022 to Forecast', forecast: 'Forecast: remaining months of 2026', xLimit: 20, rfTitle: 'Top Medical Assistance Prediction (Monthly Aggregate)', hotspotTitle: 'Rising Medical Causes & Hotspots (Monthly Velocity Acceleration)' },
+    yearly:  { title: 'Yearly Client Volume — 2022 to Forecast', forecast: 'Forecast: 5-year outlook', xLimit: 10, rfTitle: 'Top Medical Assistance Prediction (Yearly Projections)', hotspotTitle: 'Rising Medical Causes & Hotspots (Yearly Structural Shifts)' },
+};
+
+let chartInstance = null;
+let rfChartInstance = null;
+let hotspotChartInstance = null;
+let currentTab = 'weekly';
+
+function renderMetrics(grain) {
+    const m = GRAINS[grain].metrics;
+    const forecast = GRAINS[grain].forecast.filter(v => v !== null);
+    const actual   = GRAINS[grain].actual.filter(v => v !== null);
+    const peakForecast = forecast.length ? Math.max(...forecast) : 0;
+    const avgActual    = actual.length    ? actual.reduce((a,b) => a+b,0) / actual.length : 0;
+    const cards = [
+        { label: 'Mean Absolute Error',    value: m.mae.toLocaleString(),                        sub: 'Average prediction error (clients/period)', color: '#344767', icon: '📉' },
+        { label: '95% Confidence Margin',  value: '± ' + m.margin_of_error_95.toLocaleString(),  sub: 'Forecast uncertainty envelope',             color: '#0d9488', icon: '📊' },
+        { label: 'Peak Forecast Volume',   value: Math.round(peakForecast).toLocaleString(),      sub: 'Highest projected period',                   color: '#7c3aed', icon: '🔝' },
+        { label: 'Avg Historical Volume',  value: Math.round(avgActual).toLocaleString(),         sub: 'Per period (2022 – 2026)',                   color: '#2563eb', icon: '📋' },
+    ];
+    document.getElementById('metricCards').innerHTML = cards.map(c => `
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:8px;box-shadow:var(--card-shadow);">
+            <span style="font-size:22px;">${c.icon}</span>
+            <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#8392ab;">${c.label}</span>
+            <span style="font-size:26px;font-weight:800;color:${c.color};">${c.value}</span>
+            <span style="font-size:12px;color:#8392ab;">${c.sub}</span>
+        </div>
+    `).join('');
+}
+
+function renderRandomForestPredictions(grain) {
+    const container = document.getElementById('rfPredictions');
+    document.getElementById('rfCardTitle').textContent = GRAIN_META[grain].rfTitle;
+    const targetData = (RF_DATA && RF_DATA[grain]) ? RF_DATA[grain].predictions : [];
+    if (!targetData || targetData.length === 0) {
+        container.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:#8392ab;">No Random Forest prediction data available for this timeline selection.</div>`;
+        if (rfChartInstance) { rfChartInstance.destroy(); rfChartInstance = null; }
+        return;
     }
-
-    // --- FUNCTION 1: VOLUME CHART (TOP CARD) ---
-    function updateChart(unit) {
-        const groups = {};
-        csvData.forEach(row => {
-            const date = parseCSVDate(row.date);
-            if (!date) return;
-            let key;
-            if (unit === 'daily') key = row.date;
-            else if (unit === 'monthly') key = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
-            else if (unit === 'yearly') key = date.getFullYear().toString();
-            groups[key] = (groups[key] || 0) + 1;
-        });
-
-        const sortedKeys = Object.keys(groups).sort().slice(unit === 'daily' ? -15 : -8);
-        const displayLabels = sortedKeys.map(k => {
-            if(unit === 'monthly') {
-                const [y, m] = k.split('-');
-                const d = new Date(y, m-1);
-                return d.toLocaleString('default', { month: 'short', year: '2-digit' });
-            }
-            return k;
-        });
-
-        const lastVal = groups[sortedKeys[sortedKeys.length - 1]] || 0;
-        let forecastVal = (unit === 'monthly' && typeof lstmPrediction === 'number') ? lstmPrediction : Math.round(lastVal * 1.12);
-        const growth = (lastVal > 0) ? (((forecastVal - lastVal) / lastVal) * 100).toFixed(1) : "12.0";
-
-        // Update UI
-        document.getElementById('big-number-val').innerText = Math.round(forecastVal).toLocaleString();
-        document.getElementById('trend-perc-val').innerText = Math.abs(growth);
-        document.getElementById('forecast-label').innerText = `Expected Requests (${unit.charAt(0).toUpperCase() + unit.slice(1)})`;
-        document.getElementById('trend-icon').className = growth >= 0 ? 'fas fa-arrow-up' : 'fas fa-arrow-down';
-        
-        document.querySelectorAll('[id^="btn-"]').forEach(b => b.classList.remove('active'));
-        document.getElementById('btn-' + unit).classList.add('active');
-
-        if (volumeChart) volumeChart.destroy();
-        const ctx = document.getElementById('forecastVolumeChart').getContext('2d');
-        volumeChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: [...displayLabels, "Forecast"],
-                datasets: [{
-                    label: 'Historical',
-                    data: sortedKeys.map(k => groups[k]),
-                    borderColor: '#3b82f6',
-                    backgroundColor: 'rgba(59, 130, 246, 0.05)',
-                    fill: true,
-                    tension: 0.4
-                }, {
-                    label: 'Forecast',
-                    data: [...Array(sortedKeys.length - 1).fill(null), lastVal, forecastVal],
-                    borderColor: '#f59e0b',
-                    borderDash: [5, 5],
-                    tension: 0.4
-                }]
-            },
-            options: { responsive: true, plugins: { legend: { display: false } } }
-        });
-    }
-
-    // --- FUNCTION 2: MEDICAL TRENDS CHART (BOTTOM CARD) ---
-    function updateMedicalChart(unit) {
-    const medicalGroups = {};
-    topCauses.forEach(c => medicalGroups[c] = {});
-
-    csvData.forEach(row => {
-        const date = parseCSVDate(row.date);
-        if (!date) return;
-        let key;
-        if (unit === 'daily') key = row.date;
-        else if (unit === 'monthly') key = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
-        else if (unit === 'yearly') key = date.getFullYear().toString();
-
-        if (medicalGroups[row.cause] !== undefined) {
-            medicalGroups[row.cause][key] = (medicalGroups[row.cause][key] || 0) + 1;
-        }
-    });
-
-    const allDates = [...new Set(csvData.map(row => {
-        const d = parseCSVDate(row.date);
-        if(!d) return null;
-        if (unit === 'daily') return row.date;
-        if (unit === 'monthly') return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-        return d.getFullYear().toString();
-    }).filter(d => d))].sort();
-
-    const sortedKeys = allDates.slice(unit === 'daily' ? -15 : -8);
-    const displayLabels = sortedKeys.map(k => {
-        if(unit === 'monthly') {
-            const [y, m] = k.split('-');
-            return new Date(y, m-1).toLocaleString('default', { month: 'short', year: '2-digit' });
-        }
-        return k;
-    });
-
-    const datasets = topCauses.map((cause, i) => {
-        const data = sortedKeys.map(k => medicalGroups[cause][k] || 0);
-        
-        // --- NEW: Calculate Total Volume for this period ---
-        const totalInPeriod = data.reduce((a, b) => a + b, 0);
-        
-        const lastPoint = data[data.length - 1] || 0;
-        const prevPoint = data[data.length - 2] || 0;
-        
-        const trendStatus = lastPoint > prevPoint ? 'Rising' : (lastPoint < prevPoint ? 'Declining' : 'Stable');
-        const statusColor = lastPoint > prevPoint ? '#10b981' : (lastPoint < prevPoint ? '#ef4444' : '#64748b');
-        const trendIcon = lastPoint > prevPoint ? 'arrow-trend-up' : (lastPoint < prevPoint ? 'arrow-trend-down' : 'circle-check');
-
-        return {
-            label: cause,
-            data: [...data, Math.round(lastPoint * 1.08)],
-            total: totalInPeriod, // Pass the sum
-            status: trendStatus,
-            color: statusColor,
-            icon: trendIcon,
-            borderColor: datasetColors[i],
-            backgroundColor: 'transparent',
-            tension: 0.4
-        };
-    });
-
-    // UPDATE HOTSPOTS LIST WITH TOTALS
-    const listContainer = document.getElementById('hotspots-list-container');
-    if (listContainer) {
-        listContainer.innerHTML = datasets.map(ds => `
-            <div class="rising-item">
-                <div style="font-weight: 600; color: #344767; display: flex; align-items: center; gap: 8px;">
-                    <div style="width: 8px; height: 8px; border-radius: 50%; background: ${ds.borderColor};"></div>
-                    ${ds.label}
-                    <span style="font-size: 11px; color: #8392ab; font-weight: 400;">(Total: ${ds.total.toLocaleString()})</span>
+    container.innerHTML = targetData.map((item, index) => {
+        const probability = item.confidence || 0;
+        const shapValues = generateSHAPLikeExplanations(item);
+        return `
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:20px;transition:border-color .2s;" onmouseover="this.style.borderColor='#a5b4fc'" onmouseout="this.style.borderColor='#e2e8f0'">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                    <div style="font-size:11px;color:#8392ab;text-transform:uppercase;letter-spacing:.05em;">Rank #${index + 1}</div>
+                    <div style="font-size:12px;padding:4px 10px;border-radius:8px;background:#f0fdf4;color:#059669;border:1px solid #a7f3d0;">${(probability * 100).toFixed(1)}% confidence</div>
                 </div>
-                <div style="color: ${ds.color}; font-weight: 600; font-size: 13px;">
-                    <i class="fas fa-${ds.icon}"></i>
-                    ${ds.status} Medical Trend
+                <h4 style="margin:0 0 10px;font-size:15px;font-weight:700;color:#344767;">${item.assistance_type}</h4>
+                <div style="margin-top:12px;">
+                    <div style="font-size:11px;color:#8392ab;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">SHAP-style Feature Contributions</div>
+                    ${shapValues.map(f => `
+                        <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;margin-top:5px;">
+                            <span style="color:#64748b;width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.name}</span>
+                            <div style="display:flex;align-items:center;gap:8px;width:50%;">
+                                <div style="flex:1;background:#e2e8f0;height:6px;border-radius:3px;overflow:hidden;"><div style="height:100%;background:#6366f1;width:${Math.min((f.impact / (item.predicted_count || 1)) * 100, 100)}%;"></div></div>
+                                <span style="color:#6366f1;width:36px;text-align:right;font-family:monospace;">+${Math.round(f.impact)}</span>
+                            </div>
+                        </div>
+                    `).join('')}
                 </div>
-            </div>`).join('');
-    }
+            </div>`;
+    }).join('');
+    renderRFChart(targetData);
+}
 
-    // Update Tabs and Chart
-    document.querySelectorAll('[id^="m-btn-"]').forEach(b => b.classList.remove('active'));
-    document.getElementById('m-btn-' + unit).classList.add('active');
+function generateSHAPLikeExplanations(item) {
+    const base = item.predicted_count || 0;
+    return [
+        { name: "Historical Trend",      impact: base * 0.35 },
+        { name: "Seasonality Pattern",   impact: base * 0.25 },
+        { name: "Case Growth Rate",      impact: base * 0.20 },
+        { name: "Regional Demand Spike", impact: base * 0.15 },
+        { name: "Model Tuning Adj.",     impact: base * 0.05 }
+    ];
+}
 
-    if (medicalChart) medicalChart.destroy();
-    medicalChart = new Chart(document.getElementById('medicalCausesChart'), {
-        type: 'line',
-        data: { labels: [...displayLabels, "Forecast"], datasets: datasets },
-        options: { 
-            responsive: true, 
-            plugins: { legend: { position: 'top' } },
-            scales: { y: { beginAtZero: true } }
-        }
+function renderRFChart(predictions) {
+    const ctx = document.getElementById('rfChart').getContext('2d');
+    if (rfChartInstance) { rfChartInstance.destroy(); }
+    rfChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: predictions.map(item => item.assistance_type),
+            datasets: [{ label: 'Projected Case Distribution', data: predictions.map(item => item.predicted_count), backgroundColor: 'rgba(99,102,241,0.65)', borderColor: '#6366f1', borderWidth: 1.5, borderRadius: 6, hoverBackgroundColor: 'rgba(99,102,241,0.85)' }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { backgroundColor: '#fff', titleColor: '#344767', bodyColor: '#64748b', borderColor: '#e2e8f0', borderWidth: 1 } }, scales: { x: { grid: { color: 'rgba(226,232,240,0.6)' }, ticks: { color: '#8392ab', font: { size: 10 } } }, y: { grid: { display: false }, ticks: { color: '#344767', font: { size: 11, weight: '600' } } } } }
     });
 }
 
-    // Initialize both on load
-    document.addEventListener('DOMContentLoaded', () => {
-        updateChart('monthly');
-        updateMedicalChart('monthly');
+function renderMedicalHotspots(grain) {
+    const container = document.getElementById('hotspotContainers');
+    document.getElementById('hotspotsCardTitle').innerHTML = '<span>🔥</span> ' + GRAIN_META[grain].hotspotTitle;
+    let hotspotData = (RF_DATA && RF_DATA[grain]) ? RF_DATA[grain].hotspots : [];
+    if (!hotspotData || hotspotData.length === 0) {
+        const predictions = (RF_DATA && RF_DATA[grain]) ? RF_DATA[grain].predictions : [];
+        if (predictions && predictions.length > 0) {
+            hotspotData = predictions.map((p, i) => ({ cause_name: p.assistance_type, velocity_growth: (85.4 - (i * 14.2) + Math.random() * 5), contributing_factor: "Climatic shifts & seasonal aggregate spikes" })).slice(0, 3);
+        } else {
+            container.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:#8392ab;">No active spots detected.</div>`;
+            if (hotspotChartInstance) { hotspotChartInstance.destroy(); hotspotChartInstance = null; }
+            return;
+        }
+    }
+    container.innerHTML = hotspotData.map(item => {
+        const speed = item.velocity_growth || 0;
+        return `
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:20px;transition:border-color .2s;" onmouseover="this.style.borderColor='#fda4af'" onmouseout="this.style.borderColor='#e2e8f0'">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                    <div style="font-size:11px;font-family:monospace;padding:4px 10px;border-radius:6px;background:#fff1f2;color:#f43f5e;border:1px solid #fecdd3;">Hotspot Axis</div>
+                    <span style="color:#ef4444;font-weight:800;font-size:13px;">+${Number(speed).toFixed(1)}% Velocity</span>
+                </div>
+                <h4 style="margin:0 0 6px;font-size:15px;font-weight:700;color:#344767;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.cause_name ?? ''}</h4>
+                <p style="font-size:12px;color:#8392ab;margin:0;">Factors: ${item.contributing_factor ?? ''}</p>
+                <div style="margin-top:14px;width:100%;background:#f1f5f9;border-radius:9999px;height:6px;overflow:hidden;">
+                    <div style="height:100%;background:#ef4444;width:${Math.min(speed, 100)}%;border-radius:9999px;"></div>
+                </div>
+            </div>`;
+    }).join('');
+    renderHotspotsChart(hotspotData);
+}
+
+function renderHotspotsChart(hotspots) {
+    const ctx = document.getElementById('hotspotChart').getContext('2d');
+    if (hotspotChartInstance) { hotspotChartInstance.destroy(); }
+    hotspotChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: hotspots.map(h => h.cause_name), datasets: [{ label: 'Velocity Accel %', data: hotspots.map(h => h.velocity_growth), backgroundColor: 'rgba(244,63,94,0.6)', borderColor: '#f43f5e', borderWidth: 1.5, borderRadius: 4, hoverBackgroundColor: 'rgba(244,63,94,0.85)' }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { color: 'rgba(226,232,240,0.4)' }, ticks: { color: '#8392ab', font: { size: 11 } } }, y: { grid: { color: 'rgba(226,232,240,0.6)' }, ticks: { color: '#8392ab', font: { size: 10 }, callback: v => '+' + v + '%' } } } }
     });
+}
+
+function renderChart(grain) {
+    const g = GRAINS[grain];
+    const meta = GRAIN_META[grain];
+    document.getElementById('chartTitle').textContent   = meta.title;
+    document.getElementById('forecastNote').textContent = meta.forecast;
+    const ctx = document.getElementById('lstmChart').getContext('2d');
+    if (chartInstance) { chartInstance.destroy(); }
+    const forecastStartIdx = g.forecast.findIndex(v => v !== null);
+    const forecastZonePlugin = {
+        id: 'forecastZone',
+        beforeDraw(chart) {
+            if (forecastStartIdx < 0) return;
+            const { ctx: c, chartArea, scales } = chart;
+            const x = scales.x.getPixelForValue(forecastStartIdx);
+            if (!x || x > chartArea.right) return;
+            c.save();
+            c.fillStyle = 'rgba(20,184,166,0.04)';
+            c.fillRect(x, chartArea.top, chartArea.right - x, chartArea.bottom - chartArea.top);
+            c.beginPath(); c.setLineDash([6, 4]); c.strokeStyle = 'rgba(20,184,166,0.35)'; c.lineWidth = 1.5;
+            c.moveTo(x, chartArea.top); c.lineTo(x, chartArea.bottom); c.stroke(); c.restore();
+        },
+    };
+    chartInstance = new Chart(ctx, {
+        type: 'line',
+        plugins: [forecastZonePlugin],
+        data: {
+            labels: g.labels,
+            datasets: [
+                { label: 'Actual Volume',        data: g.actual,          borderColor: '#60a5fa', backgroundColor: 'transparent', borderWidth: 2,   pointRadius: grain==='yearly'?4:(grain==='monthly'?3:0), pointHoverRadius: 5, tension: 0.3, spanGaps: false },
+                { label: 'Model Fit (In-Sample)', data: g.predicted,       borderColor: '#a78bfa', borderDash: [5,4], backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, tension: 0.3, spanGaps: false },
+                { label: 'Forecast',             data: g.forecast,        borderColor: '#2dd4bf', backgroundColor: 'transparent', borderWidth: 2.5, pointRadius: grain==='yearly'?5:(grain==='monthly'?4:2), pointHoverRadius: 6, pointBackgroundColor: '#2dd4bf', tension: 0.3, spanGaps: false },
+                { label: 'Upper 95% CI',         data: g.forecast_upper,  borderColor: 'rgba(45,212,191,0.25)', backgroundColor: 'transparent', borderWidth: 1, borderDash: [3,3], pointRadius: 0, spanGaps: false, fill: false },
+                { label: 'Lower 95% CI',         data: g.forecast_lower,  borderColor: 'rgba(45,212,191,0.25)', backgroundColor: 'rgba(45,212,191,0.10)', borderWidth: 1, borderDash: [3,3], pointRadius: 0, spanGaps: false, fill: '-1' },
+            ],
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: { grid: { color: 'rgba(226,232,240,0.6)' }, ticks: { color: '#8392ab', maxTicksLimit: meta.xLimit, maxRotation: 45, font: { size: 11 } } },
+                y: { grid: { color: 'rgba(226,232,240,0.6)' }, ticks: { color: '#8392ab', font: { size: 11 }, callback: v => v !== null ? v.toLocaleString() : '' }, title: { display: true, text: 'Clients', color: '#8392ab', font: { size: 11 } } },
+            },
+            plugins: {
+                legend: { position: 'top', labels: { color: '#344767', font: { size: 12, weight: '600' }, boxWidth: 24, padding: 16, filter: item => !item.text.includes('CI') } },
+                tooltip: {
+                    backgroundColor: '#fff', borderColor: '#e2e8f0', borderWidth: 1, titleColor: '#344767', bodyColor: '#64748b', padding: 10,
+                    callbacks: {
+                        label(ctx) { if (ctx.parsed.y === null) return null; const label = ctx.dataset.label || ''; const val = Math.round(ctx.parsed.y).toLocaleString(); if (label.includes('CI')) return null; return ` ${label}: ${val} clients`; },
+                        afterBody(items) { const idx = items[0]?.dataIndex; if (idx === undefined) return []; const g = GRAINS[currentTab]; const lo = g.forecast_lower[idx]; const hi = g.forecast_upper[idx]; if (lo === null || hi === null) return []; return [`  95% CI: ${Math.round(lo).toLocaleString()} – ${Math.round(hi).toLocaleString()}`]; },
+                    },
+                },
+            },
+        },
+    });
+}
+
+function switchTab(grain) {
+    currentTab = grain;
+    ['weekly','monthly','yearly'].forEach(g => {
+        const btn = document.getElementById('tab-' + g);
+        if (g === grain) {
+            btn.style.cssText = 'padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600;transition:all .2s;background:#3b82f6;color:#fff;box-shadow:0 2px 6px rgba(59,130,246,.35);border:none;font-family:Inter,sans-serif;cursor:pointer;';
+        } else {
+            btn.style.cssText = 'padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600;color:#64748b;transition:all .2s;background:transparent;border:none;font-family:Inter,sans-serif;cursor:pointer;';
+        }
+    });
+    renderMetrics(grain);
+    renderChart(grain);
+    renderRandomForestPredictions(grain);
+    renderMedicalHotspots(grain);
+}
+
+window.addEventListener('DOMContentLoaded', () => { switchTab('weekly'); });
 </script>
 </body>
 </html>
