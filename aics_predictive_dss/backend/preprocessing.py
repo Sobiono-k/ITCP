@@ -1,104 +1,261 @@
 import pandas as pd
-import os
-import sys
 from sqlalchemy import create_engine
 
-# =========================
-# Data Loading Functions
-# =========================
+# =========================================================
+# DATABASE CONFIGURATION
+# =========================================================
 
-def load_csv_data(path=None):
+DB_CONNECTION = "mysql+pymysql://root:@localhost/aics_dss"
+
+
+# =========================================================
+# LOAD DATA FROM MYSQL
+# =========================================================
+
+def load_csv_data():
+    """
+    Load AICS data from MySQL database
+    and prepare it for forecasting.
+    """
+
     try:
-        engine = create_engine("mysql+pymysql://root:@localhost/aics_dss")
-        query = "SELECT * FROM aics_sample_data ORDER BY id ASC"
+        # Connect to MySQL
+        engine = create_engine(DB_CONNECTION)
+
+        query = """
+            SELECT *
+            FROM aics_sample_data
+            ORDER BY id ASC
+        """
+
         df = pd.read_sql(query, engine)
 
+        # -------------------------------------------------
+        # EMPTY DATASET CHECK
+        # -------------------------------------------------
         if df.empty:
+            print("Dataset is empty.")
             return pd.DataFrame()
 
-        # 🔍 Find request_date column (robust)
+        # -------------------------------------------------
+        # FIND DATE COLUMN
+        # -------------------------------------------------
         actual_date_col = None
+
         for col in df.columns:
             if 'request_date' in col.lower():
                 actual_date_col = col
                 break
 
-        if not actual_date_col:
+        if actual_date_col is None:
             print("No request_date column found.")
             return pd.DataFrame()
 
-        df = df.rename(columns={actual_date_col: 'request_date'})
+        # Rename column consistently
+        df = df.rename(columns={
+            actual_date_col: 'request_date'
+        })
 
-        # ✅ Robust parsing (handles mixed formats safely)
+        # -------------------------------------------------
+        # PARSE DATES SAFELY
+        # -------------------------------------------------
         df['request_date'] = pd.to_datetime(
             df['request_date'],
-                format='%Y-%m-%d',
-                errors='coerce'
+            errors='coerce'
         )
 
-        # ❗ Drop invalid dates immediately
+        # Remove invalid dates
         df = df.dropna(subset=['request_date'])
 
-        # 🧹 Clean other columns
-        df['medical_cause'] = df.get('medical_cause', 'Unknown').fillna('Unknown')
-        df['assistance_type'] = df.get('assistance_type', 'Unknown').fillna('Unknown')
+        # -------------------------------------------------
+        # KEEP ONLY REALISTIC YEARS
+        # -------------------------------------------------
+        df = df[
+            (df['request_date'].dt.year >= 2022) &
+            (df['request_date'].dt.year <= 2030)
+        ]
+
+        # -------------------------------------------------
+        # CLEAN OPTIONAL COLUMNS
+        # -------------------------------------------------
+        optional_columns = [
+            'medical_cause',
+            'assistance_type'
+        ]
+
+        for col in optional_columns:
+            if col not in df.columns:
+                df[col] = 'Unknown'
+
+            df[col] = df[col].fillna('Unknown')
+
+        # -------------------------------------------------
+        # SORT DATA
+        # -------------------------------------------------
+        df = df.sort_values('request_date')
 
         return df
 
     except Exception as e:
-        print(f"Error connecting to MySQL: {e}")
+        print(f"MySQL Connection Error: {e}")
         return pd.DataFrame()
 
-# =========================
-# Time-Series Creation
-# =========================
+
+# =========================================================
+# CREATE TIME SERIES
+# =========================================================
 
 def create_time_series(df, freq='D'):
+    """
+    Create continuous time-series data
+    with missing dates filled as zero.
+    """
+
     if df.empty:
         return pd.DataFrame()
 
-    # ✅ DO NOT re-parse date (already parsed earlier)
-    df = df.sort_values('request_date')
+    # -------------------------------------------------
+    # GROUP BY FREQUENCY
+    # -------------------------------------------------
+    ts = (
+        df.groupby(
+            pd.Grouper(
+                key='request_date',
+                freq=freq
+            )
+        )
+        .size()
+        .rename('request_count')
+        .to_frame()
+    )
 
-    # 📊 Group by day (or change freq if needed)
-    ts = df.groupby(pd.Grouper(key='request_date', freq=freq)).size()
-    ts = ts.rename('request_count').to_frame()
+    # -------------------------------------------------
+    # FILL MISSING DATES
+    # -------------------------------------------------
+    full_range = pd.date_range(
+        start=ts.index.min(),
+        end=ts.index.max(),
+        freq=freq
+    )
 
-    # 📅 Fill missing dates (CRUCIAL for LSTM continuity)
-    full_range = pd.date_range(start=ts.index.min(), end=ts.index.max(), freq=freq)
     ts = ts.reindex(full_range, fill_value=0)
 
+    # -------------------------------------------------
+    # RESET INDEX
+    # -------------------------------------------------
     ts = ts.reset_index()
-    ts.columns = ['request_date', 'request_count']
+
+    ts.columns = [
+        'request_date',
+        'request_count'
+    ]
 
     return ts
 
-def monthly_series():
-    df = load_csv_data() # Ensure this has all data (up to April 2026)
-    if df.empty:
-        return pd.Series([0])
 
-    # ✅ Aggregate by Month ('ME' = Month End)
-    ts = df.groupby(pd.Grouper(key='request_date', freq='ME')).size()
-    
-    # Return the full series so the LSTM has enough context to see the growth
+# =========================================================
+# MONTHLY SERIES FOR LSTM
+# =========================================================
+
+def monthly_series():
+    """
+    Generate monthly request totals
+    for LSTM forecasting.
+    """
+
+    df = load_csv_data()
+
+    if df.empty:
+        return pd.Series(dtype=float)
+
+    # -------------------------------------------------
+    # MONTH START FREQUENCY
+    # -------------------------------------------------
+    ts = (
+        df.groupby(
+            pd.Grouper(
+                key='request_date',
+                freq='MS'
+            )
+        )
+        .size()
+    )
+
     return ts.astype(float)
 
-# =========================
-# Testing Block
-# =========================
+
+# =========================================================
+# YEARLY SERIES
+# =========================================================
+
+def yearly_series():
+    """
+    Generate yearly request totals.
+    """
+
+    df = load_csv_data()
+
+    if df.empty:
+        return pd.Series(dtype=float)
+
+    ts = (
+        df.groupby(
+            pd.Grouper(
+                key='request_date',
+                freq='YS'
+            )
+        )
+        .size()
+    )
+
+    return ts.astype(float)
+
+
+# =========================================================
+# TESTING BLOCK
+# =========================================================
 
 if __name__ == "__main__":
-    print("--- AICS SQL Preprocessing Pipeline ---")
+
+    print("\n--- AICS PREPROCESSING PIPELINE ---\n")
+
     data = load_csv_data()
-    
+
     if not data.empty:
-        print(f"Successfully loaded {len(data)} records.")
-        print(f"Latest Date in Data: {data['request_date'].max()}")
-        
-        # Check the counts for Jan 1st 2025
-        ts = create_time_series(data)
-        print("\nLast 10 Days of Activity:")
-        print(ts.tail(10))
+
+        print(f"Records Loaded : {len(data)}")
+
+        print(
+            f"Date Range     : "
+            f"{data['request_date'].min()} "
+            f"to "
+            f"{data['request_date'].max()}"
+        )
+
+        # -------------------------------------------------
+        # DAILY SERIES
+        # -------------------------------------------------
+        daily_ts = create_time_series(data)
+
+        print("\nLast 10 Daily Records:")
+        print(daily_ts.tail(10))
+
+        # -------------------------------------------------
+        # MONTHLY SERIES
+        # -------------------------------------------------
+        monthly_ts = monthly_series()
+
+        print("\nMonthly Totals:")
+        print(monthly_ts.tail())
+
+        # -------------------------------------------------
+        # YEARLY SERIES
+        # -------------------------------------------------
+        yearly_ts = yearly_series()
+
+        print("\nYearly Totals:")
+        print(yearly_ts.tail())
+
     else:
-        print("Data load failed. Verify the table 'aics_sample_data' exists.")
+        print("Data loading failed.")
+
