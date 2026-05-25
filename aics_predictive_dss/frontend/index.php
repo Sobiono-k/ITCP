@@ -219,11 +219,7 @@ echo "<script>
             <div class="value"><?php echo number_format($pending_count); ?> <span style="font-size:14px;color:#64748b;font-weight:400">Pending</span></div>
             <div class="trend" style="color:#8b5cf6"><i class="fas fa-clock"></i> <?php echo number_format($approved_count); ?> Approved</div>
         </div>
-        <div class="card highlight">
-            <h3>Predicted Next Period</h3>
-            <div class="value" id="kpi-predicted"><?php echo number_format($lstm_val); ?></div>
-            <div class="trend" style="color:#3b82f6"><i class="fas fa-brain"></i> <span id="kpi-grain-label">Monthly</span> Forecast</div>
-        </div>
+        
         <div class="card">
             <h3>Top 3 Assistance Types</h3>
             <div style="margin-top:10px">
