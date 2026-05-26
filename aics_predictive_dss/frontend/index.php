@@ -1,4 +1,5 @@
 <?php
+set_time_limit(0);
 session_start();
 
 if (!isset($_SESSION['role'])) {
@@ -47,7 +48,6 @@ if (!$lstmData || !isset($lstmData['weekly'], $lstmData['monthly'], $lstmData['y
     ];
 }
 
-// KPI card value — first non-null monthly forecast
 $lstm_val = 0;
 foreach (($lstmData['monthly']['forecast'] ?? []) as $fv) {
     if ($fv !== null) { $lstm_val = round($fv); break; }
@@ -175,13 +175,30 @@ echo "<script>
         table{width:100%;border-collapse:collapse;margin-top:10px}
         table th{text-align:left;padding:12px;border-bottom:2px solid #f1f5f9;color:#94a3b8;font-size:11px;text-transform:uppercase;font-weight:700}
         table td{padding:14px 12px;border-bottom:1px solid #f1f5f9;font-size:14px}
-        .trend-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #f8fafc}
-        .trend-dot{width:8px;height:8px;border-radius:50%;margin-right:10px}
-        .insight-pipeline-a{border-left:4px solid #3b82f6;background:#eff6ff;padding:15px;border-radius:8px;margin-bottom:10px}
-        .insight-pipeline-b{border-left:4px solid #8b5cf6;background:#f5f3ff;padding:15px;border-radius:8px;margin-bottom:10px}
-        .insight-pipeline-c{border-left:4px solid #0891b2;background:#ecfeff;padding:15px;border-radius:8px;margin-bottom:20px}
+        .trend-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f8fafc}
+        .trend-dot{width:8px;height:8px;border-radius:50%;margin-right:10px;flex-shrink:0}
+
+        /* ── Insight panels ── */
+        .insight-panel{border-radius:8px;padding:14px 16px;margin-bottom:10px;transition:background 0.3s,border-color 0.3s}
+        .insight-panel-a{border-left:4px solid #3b82f6;background:#eff6ff}
+        .insight-panel-b{border-left:4px solid #8b5cf6;background:#f5f3ff}
+        .insight-panel-c{border-left:4px solid #0891b2;background:#ecfeff;margin-bottom:16px}
+        .insight-grain-badge{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:2px 7px;border-radius:4px;margin-bottom:6px}
+        .insight-panel-a .insight-grain-badge{background:#dbeafe;color:#1e40af}
+        .insight-panel-b .insight-grain-badge{background:#ede9fe;color:#5b21b6}
+        .insight-panel-c .insight-grain-badge{background:#cffafe;color:#164e63}
+        .insight-title{font-weight:700;font-size:14px;margin:0 0 4px 0;line-height:1.3}
+        .insight-panel-a .insight-title{color:#1e3a8a}
+        .insight-panel-b .insight-title{color:#4c1d95}
+        .insight-panel-c .insight-title{color:#164e63}
+        .insight-desc{font-size:12px;margin:0;line-height:1.5}
+        .insight-panel-a .insight-desc{color:#1e40af}
+        .insight-panel-b .insight-desc{color:#5b21b6}
+        .insight-panel-c .insight-desc{color:#155e75}
+
         #map{height:250px;width:100%;border-radius:8px;margin-top:15px;z-index:1}
         .map-stats{display:flex;justify-content:space-between;align-items:center}
+
         /* ── Forecast section ── */
         .forecast-section{background:#fff;border-radius:12px;box-shadow:var(--card-shadow);padding:28px;margin-bottom:30px;border:1px solid #e2e8f0}
         .forecast-section h2{font-size:18px;margin:0 0 6px 0;color:var(--dswd-dark)}
@@ -219,7 +236,6 @@ echo "<script>
             <div class="value"><?php echo number_format($pending_count); ?> <span style="font-size:14px;color:#64748b;font-weight:400">Pending</span></div>
             <div class="trend" style="color:#8b5cf6"><i class="fas fa-clock"></i> <?php echo number_format($approved_count); ?> Approved</div>
         </div>
-        
         <div class="card">
             <h3>Top 3 Assistance Types</h3>
             <div style="margin-top:10px">
@@ -262,31 +278,35 @@ echo "<script>
             <div id="map"></div>
         </div>
 
+        <!-- DECISION INSIGHTS — no toggle; syncs automatically with forecast tabs -->
         <div class="section-box">
-            <h2>Decision Insights</h2>
+            <h2 style="margin-bottom:14px">Decision Insights</h2>
 
-            <div class="insight-pipeline-a" id="pipeline-a-insight">
-                <small style="color:#1e40af;font-weight:700;text-transform:uppercase;font-size:10px">Pipeline A: Volume Forecast</small>
-                <div id="insight-title" style="font-weight:700;color:#1e3a8a;font-size:15px;margin:5px 0">Calculating...</div>
-                <p id="insight-desc" style="font-size:12px;color:#1e40af;margin:0;line-height:1.4"></p>
+            <!-- Pipeline A: Volume Forecast -->
+            <div class="insight-panel insight-panel-a" id="pa-panel">
+                <div class="insight-grain-badge" id="pa-badge">Pipeline A · Monthly</div>
+                <div class="insight-title" id="pa-title">Calculating…</div>
+                <p class="insight-desc" id="pa-desc"></p>
             </div>
 
-            <div class="insight-pipeline-b" id="pipeline-b-insight">
-                <small style="color:#5b21b6;font-weight:700;text-transform:uppercase;font-size:10px">Pipeline B: Medical Trends</small>
-                <div id="pb-insight-title" style="font-weight:700;color:#4c1d95;font-size:15px;margin:5px 0">Analyzing...</div>
-                <p id="pb-insight-desc" style="font-size:12px;color:#5b21b6;margin:0;line-height:1.4"></p>
+            <!-- Pipeline B: Medical Trends -->
+            <div class="insight-panel insight-panel-b" id="pb-panel">
+                <div class="insight-grain-badge" id="pb-badge">Pipeline B · Monthly</div>
+                <div class="insight-title" id="pb-title">Analyzing…</div>
+                <p class="insight-desc" id="pb-desc"></p>
             </div>
 
-            <div class="insight-pipeline-c" id="pipeline-c-insight">
-                <small style="color:#164e63;font-weight:700;text-transform:uppercase;font-size:10px">Pipeline C: Strategic Planning</small>
-                <div id="pc-insight-title" style="font-weight:700;color:#164e63;font-size:15px;margin:5px 0">Case Load Scaling</div>
-                <p id="pc-insight-desc" style="font-size:12px;color:#155e75;margin:0;line-height:1.4"></p>
+            <!-- Pipeline C: Strategic / Budget -->
+            <div class="insight-panel insight-panel-c" id="pc-panel">
+                <div class="insight-grain-badge" id="pc-badge">Pipeline C · Monthly</div>
+                <div class="insight-title" id="pc-title">Budget Planning</div>
+                <p class="insight-desc" id="pc-desc"></p>
             </div>
 
-            <small style="color:#64748b">Pipeline B: Cause Classification</small>
-            <div style="margin-top:20px" id="rf-trends-container"></div>
+            <small style="color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em">Pipeline B — Cause Breakdown</small>
+            <div style="margin-top:10px" id="rf-trends-container"></div>
 
-            <p style="font-size:12px;color:#64748b;margin-top:20px;line-height:1.6;background:#f8fafc;padding:15px;border-radius:8px;border-left:3px solid #3b82f6">
+            <p style="font-size:12px;color:#64748b;margin-top:16px;line-height:1.6;background:#f8fafc;padding:14px;border-radius:8px;border-left:3px solid #3b82f6">
                 <strong>Strategic Insight:</strong> Automated clustering suggests
                 <strong id="live-top-cause"><?php echo htmlspecialchars($topCause); ?></strong> remains the primary driver.
             </p>
@@ -300,7 +320,6 @@ echo "<script>
                 <h2>AICS Client Volume Forecast</h2>
                 <p style="font-size:12px;color:#64748b;margin:0">LSTM-powered predictions — historical data 2022–2026 with forward projections</p>
             </div>
-            <!-- Single shared toggle — controls chart, metrics, KPI card, and insights -->
             <div class="chart-controls">
                 <button id="btn-weekly"  class="tgl-btn"        onclick="switchGrain('weekly')">Weekly</button>
                 <button id="btn-monthly" class="tgl-btn active" onclick="switchGrain('monthly')">Monthly</button>
@@ -308,10 +327,8 @@ echo "<script>
             </div>
         </div>
 
-        <!-- Metric cards -->
         <div class="forecast-metric-grid" id="fcMetricCards"></div>
 
-        <!-- Legend -->
         <div class="fc-legend">
             <span><span class="fc-line" style="background:#3b82f6"></span>Actual recorded volume</span>
             <span><span class="fc-line" style="background:#a78bfa;border-top:2px dashed #a78bfa;height:0"></span>Model fit (in-sample)</span>
@@ -319,7 +336,6 @@ echo "<script>
             <span><span class="fc-line" style="background:rgba(13,148,136,.25);border:1px solid rgba(13,148,136,.4);height:10px;border-radius:3px"></span>95% confidence band</span>
         </div>
 
-        <!-- Chart -->
         <div style="position:relative;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
                 <span id="fcChartTitle" style="font-size:13px;font-weight:700;color:#1e293b"></span>
@@ -344,11 +360,11 @@ echo "<script>
 </div>
 
 <script>
-// ── State ──────────────────────────────────────────────────────
+// ─── State ────────────────────────────────────────────────────────
 let fcChartInstance = null;
 let currentGrain    = 'monthly';
 
-const GRAIN_MAP = { weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' };
+const GRAIN_LABEL = { weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' };
 
 const FC_META = {
     weekly:  { title:'Weekly Client Volume — 2022 to Forecast',  forecast:'Forecast: next 26 weeks (~6 months)', xLimit:15 },
@@ -356,136 +372,157 @@ const FC_META = {
     yearly:  { title:'Yearly Client Volume — 2022 to Forecast',  forecast:'Forecast: 5-year outlook',           xLimit:10 },
 };
 
-// ── Shared entry point — call this for any grain change ────────
+// ─── Master entry point ───────────────────────────────────────────
+// Every UI change flows through here. Order matters:
+// 1. toggle buttons  2. insights  3. metrics  4. chart
 function switchGrain(grain) {
     currentGrain = grain;
 
-    // Toggle buttons
-    ['weekly','monthly','yearly'].forEach(g => {
-        document.getElementById('btn-' + g).classList.toggle('active', g === grain);
-    });
+    // 1. Sync forecast toggle buttons
+    ['weekly','monthly','yearly'].forEach(g =>
+        document.getElementById('btn-' + g).classList.toggle('active', g === grain)
+    );
 
-    // Update KPI card label + value
-    const grainForecast = (GRAINS[grain].forecast || []).find(v => v !== null) ?? backendLstmVal;
-    const kpiEl = document.getElementById('kpi-predicted');
-    const kpiLabel = document.getElementById('kpi-grain-label');
-    if (kpiEl)    kpiEl.textContent   = Math.round(grainForecast).toLocaleString();
-    if (kpiLabel) kpiLabel.textContent = GRAIN_MAP[grain];
+    // 2. Compute the PEAK (max) forecast value for this grain — same value shown in the metric card
+    const forecastNonNull = (GRAINS[grain].forecast || []).filter(v => v !== null);
+    const forecastVal     = forecastNonNull.length ? Math.max(...forecastNonNull) : backendLstmVal;
 
-    // Update Pipeline A insight
-    updatePipelineAInsight(grain, grainForecast);
+    // 3. Update all three insight panels (they read `grain` and `forecastVal`)
+    renderInsightPanelA(grain, forecastVal);
+    renderInsightPanelB(grain, forecastVal);
+    renderInsightPanelC(grain, forecastVal);
 
-    // Update Pipeline B & C insights
-    updatePipelineBCInsights(grain, grainForecast);
-
-    // Render metric cards + chart
+    // 4. Render metric cards and chart
     renderMetrics(grain);
     renderChart(grain);
 }
 
-// ── Pipeline A insight ─────────────────────────────────────────
-function updatePipelineAInsight(grain, forecastVal) {
-    const actual = (GRAINS[grain].actual || []).filter(v => v !== null);
+// ─── Pipeline A: Volume Forecast Insight ─────────────────────────
+function renderInsightPanelA(grain, forecastVal) {
+    const actual  = (GRAINS[grain].actual || []).filter(v => v !== null);
     const lastVal = actual.length ? actual[actual.length - 1] : 0;
     const growth  = (((forecastVal - lastVal) / (lastVal || 1)) * 100).toFixed(1);
+    const isSurge = parseFloat(growth) > 10;
 
-    const iTitle = document.getElementById('insight-title');
-    const iDesc  = document.getElementById('insight-desc');
-    const iBox   = document.getElementById('pipeline-a-insight');
+    document.getElementById('pa-badge').textContent  = 'Pipeline A · ' + GRAIN_LABEL[grain];
+    document.getElementById('pa-title').innerHTML    = isSurge
+        ? `<i class="fas fa-chart-line"></i> Forecasted Surge (${growth}%)`
+        : `<i class="fas fa-check-circle"></i> Normal Volume (${growth}%)`;
+    document.getElementById('pa-desc').textContent   = isSurge
+        ? `Expecting ${Math.round(forecastVal).toLocaleString()} total requests. High workload anticipated for this ${grain} period.`
+        : `Growth at ${growth}%. Operations expected to remain steady for the ${grain} period.`;
 
-    if (!iTitle) return;
-
-    if (parseFloat(growth) > 10) {
-        iTitle.innerHTML = `<i class="fas fa-chart-line"></i> Forecasted Surge (${growth}%)`;
-        iDesc.innerText  = `Expecting ${Math.round(forecastVal).toLocaleString()} total requests. High workload ahead for ${grain} period.`;
-        iBox.style.borderLeftColor = '#ef4444';
-        iBox.style.background      = '#fef2f2';
+    const panel = document.getElementById('pa-panel');
+    if (isSurge) {
+        panel.style.borderLeftColor = '#ef4444';
+        panel.style.background      = '#fef2f2';
+        document.getElementById('pa-badge').style.cssText = 'background:#fee2e2;color:#991b1b;display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:2px 7px;border-radius:4px;margin-bottom:6px';
+        document.getElementById('pa-title').style.color   = '#7f1d1d';
+        document.getElementById('pa-desc').style.color    = '#991b1b';
     } else {
-        iTitle.innerHTML = `<i class="fas fa-check-circle"></i> Normal Volume`;
-        iDesc.innerText  = `Growth at ${growth}%. Operations expected to remain steady.`;
-        iBox.style.borderLeftColor = '#10b981';
-        iBox.style.background      = '#f0fdf4';
+        panel.style.borderLeftColor = '#10b981';
+        panel.style.background      = '#f0fdf4';
+        document.getElementById('pa-badge').style.cssText = 'background:#dcfce7;color:#14532d;display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:2px 7px;border-radius:4px;margin-bottom:6px';
+        document.getElementById('pa-title').style.color   = '#14532d';
+        document.getElementById('pa-desc').style.color    = '#166534';
     }
 }
 
-// ── Pipeline B & C insights ────────────────────────────────────
-function updatePipelineBCInsights(grain, predictedTotal) {
+// ─── Pipeline B: Medical Cause Trend Insight ─────────────────────
+function renderInsightPanelB(grain, forecastVal) {
     const now = new Date();
-    const timeframeCounts = {};
-    const globalCounts    = {};
-    let tfTotal = 0, globalTotal = 0;
 
+    // Bucket csvData into the selected grain window
+    const counts = {};
+    let total = 0;
     csvData.forEach(row => {
         const d = new Date(row.date);
-        if (isNaN(d)) return;
-        globalCounts[row.cause] = (globalCounts[row.cause] || 0) + 1;
-        globalTotal++;
-
-        let match = false;
-        if (grain === 'weekly') {
-            const msPerWeek = 7*24*60*60*1000;
-            match = (now - d) <= msPerWeek;
-        } else if (grain === 'monthly') {
-            match = d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-        } else if (grain === 'yearly') {
-            match = d.getFullYear() === now.getFullYear();
-        }
-        if (match) { timeframeCounts[row.cause] = (timeframeCounts[row.cause] || 0) + 1; tfTotal++; }
+        if (isNaN(d) || !row.cause) return;
+        let inWindow = false;
+        if      (grain === 'weekly')  inWindow = (now - d) <= 7 * 24 * 60 * 60 * 1000;
+        else if (grain === 'monthly') inWindow = d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        else if (grain === 'yearly')  inWindow = d.getFullYear() === now.getFullYear();
+        if (inWindow) { counts[row.cause] = (counts[row.cause] || 0) + 1; total++; }
     });
 
-    const activeData  = tfTotal > 0 ? timeframeCounts : globalCounts;
-    const activeTotal = tfTotal > 0 ? tfTotal         : globalTotal;
-    const sorted      = Object.entries(activeData).sort((a,b) => b[1]-a[1]);
+    // Fall back to all-time data if no records in the grain window
+    const useAllTime = total === 0;
+    if (useAllTime) {
+        csvData.forEach(row => {
+            if (!row.cause) return;
+            counts[row.cause] = (counts[row.cause] || 0) + 1;
+            total++;
+        });
+    }
+
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
     if (!sorted.length) return;
 
     const [topCause, topCount] = sorted[0];
-    const demandPercent        = topCount / activeTotal;
-    const predictedCauseVol    = Math.round(predictedTotal * demandPercent);
+    const demandRatio          = topCount / (total || 1);
+    const predictedCauseVol    = Math.round(forecastVal * demandRatio);
+    const grainLabel           = GRAIN_LABEL[grain];
+    const windowNote           = useAllTime ? '(all-time data)' : `(${grainLabel.toLowerCase()} window)`;
 
-    const pbTitle = document.getElementById('pb-insight-title');
-    const pbDesc  = document.getElementById('pb-insight-desc');
-    if (pbTitle) {
-        pbTitle.innerHTML = `<i class="fas fa-stethoscope"></i> ${GRAIN_MAP[grain]} Forecast: ${topCause}`;
-        pbDesc.innerText  = `Out of ${Math.round(predictedTotal).toLocaleString()} predicted requests, approx. ${predictedCauseVol.toLocaleString()} are expected for ${topCause}.`;
-    }
+    document.getElementById('pb-badge').textContent = 'Pipeline B · ' + grainLabel;
+    document.getElementById('pb-title').innerHTML   =
+        `<i class="fas fa-stethoscope"></i> ${grainLabel} Forecast: ${topCause}`;
+    document.getElementById('pb-desc').textContent  =
+        `Of the ${Math.round(forecastVal).toLocaleString()} predicted requests ${windowNote}, `
+        + `approx. ${predictedCauseVol.toLocaleString()} are expected for ${topCause}.`;
 
-    const pcTitle = document.getElementById('pc-insight-title');
-    const pcDesc  = document.getElementById('pc-insight-desc');
-    if (pcTitle) {
-        const budget = Math.round(predictedTotal) * 3500;
-        pcTitle.innerHTML = `<i class="fas fa-wallet"></i> Budget Planning`;
-        pcDesc.innerHTML  = `To support the predicted <strong>${Math.round(predictedTotal).toLocaleString()}</strong> applicants, an allocation of <strong>₱${budget.toLocaleString()}</strong> is recommended for the ${grain} period.`;
-    }
-
-    const trendContainer = document.getElementById('rf-trends-container');
-    if (trendContainer) {
-        trendContainer.innerHTML = sorted.slice(0,4).map(([cause, count]) => {
-            const perc = ((count / activeTotal) * 100).toFixed(1);
+    // Cause breakdown bars
+    const container = document.getElementById('rf-trends-container');
+    if (container) {
+        container.innerHTML = sorted.slice(0, 4).map(([cause, count]) => {
+            const pct      = ((count / total) * 100).toFixed(1);
+            const isTop    = cause === topCause;
+            const dotColor = isTop ? '#8b5cf6' : '#94a3b8';
             return `<div class="trend-row">
-                <div style="display:flex;align-items:center">
-                    <div class="trend-dot" style="background:${cause===topCause?'#3b82f6':'#94a3b8'}"></div>
-                    <span style="font-size:13px;font-weight:600">${cause}</span>
+                <div style="display:flex;align-items:center;flex:1;min-width:0">
+                    <div class="trend-dot" style="background:${dotColor}"></div>
+                    <span style="font-size:13px;font-weight:${isTop?'700':'500'};color:${isTop?'#1e293b':'#475569'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${cause}</span>
                 </div>
-                <span style="font-size:11px;font-weight:700;color:#64748b">${perc}%</span>
+                <span style="font-size:11px;font-weight:700;color:#64748b;margin-left:8px">${pct}%</span>
             </div>`;
         }).join('');
     }
+
+    // Update strategic insight chip
+    const chip = document.getElementById('live-top-cause');
+    if (chip) chip.textContent = topCause;
 }
 
-// ── Metric cards ───────────────────────────────────────────────
+// ─── Pipeline C: Budget / Strategic Insight ───────────────────────
+function renderInsightPanelC(grain, forecastVal) {
+    const grainLabel  = GRAIN_LABEL[grain];
+    const budget      = Math.round(forecastVal) * 3500;
+    const staffNeeded = Math.ceil(Math.round(forecastVal) / 50); // 1 staff per 50 cases
+
+    document.getElementById('pc-badge').textContent = 'Pipeline C · ' + grainLabel;
+    document.getElementById('pc-title').innerHTML   =
+        `<i class="fas fa-wallet"></i> ${grainLabel} Budget & Staffing Plan`;
+    document.getElementById('pc-desc').innerHTML    =
+        `To support the predicted <strong>${Math.round(forecastVal).toLocaleString()}</strong> applicants `
+        + `for the ${grainLabel.toLowerCase()} period, an allocation of `
+        + `<strong>₱${budget.toLocaleString()}</strong> is recommended, `
+        + `with an estimated <strong>${staffNeeded} staff</strong> required to manage caseload.`;
+}
+
+// ─── Metric cards ─────────────────────────────────────────────────
 function renderMetrics(grain) {
-    const g          = GRAINS[grain];
-    const forecast   = (g.forecast || []).filter(v => v !== null);
-    const actual     = (g.actual   || []).filter(v => v !== null);
-    const peak       = forecast.length ? Math.max(...forecast) : 0;
-    const avg        = actual.length   ? actual.reduce((a,b)=>a+b,0)/actual.length : 0;
-    const m          = g.metrics || { mae:0, margin_of_error_95:0 };
+    const g        = GRAINS[grain];
+    const forecast = (g.forecast || []).filter(v => v !== null);
+    const actual   = (g.actual   || []).filter(v => v !== null);
+    const peak     = forecast.length ? Math.max(...forecast) : 0;
+    const avg      = actual.length   ? actual.reduce((a, b) => a + b, 0) / actual.length : 0;
+    const m        = g.metrics || { mae: 0, margin_of_error_95: 0 };
 
     const cards = [
-        { label:'Mean Absolute Error',   value:Number(m.mae).toLocaleString(),                       sub:'Avg prediction error (clients/period)', icon:'📉', color:'#1e293b' },
-        { label:'95% Confidence Margin', value:'± '+Number(m.margin_of_error_95).toLocaleString(),   sub:'Forecast uncertainty envelope',         icon:'📊', color:'#0d9488' },
-        { label:'Peak Forecast Volume',  value:Math.round(peak).toLocaleString(),                    sub:'Highest projected period',              icon:'🔝', color:'#7c3aed' },
-        { label:'Avg Historical Volume', value:Math.round(avg).toLocaleString(),                     sub:'Per period (2022–2026)',                 icon:'📋', color:'#3b82f6' },
+        { label:'Mean Absolute Error',   value:Number(m.mae).toLocaleString(),               sub:'Avg prediction error (clients/period)', icon:'📉', color:'#1e293b' },
+        { label:'95% Confidence Margin', value:'± ' + Number(m.margin_of_error_95).toLocaleString(), sub:'Forecast uncertainty envelope',   icon:'📊', color:'#0d9488' },
+        { label:'Peak Forecast Volume',  value:Math.round(peak).toLocaleString(),             sub:'Highest projected period',              icon:'🔝', color:'#7c3aed' },
+        { label:'Avg Historical Volume', value:Math.round(avg).toLocaleString(),              sub:'Per period (2022–2026)',                 icon:'📋', color:'#3b82f6' },
     ];
 
     document.getElementById('fcMetricCards').innerHTML = cards.map(c => `
@@ -497,7 +534,7 @@ function renderMetrics(grain) {
         </div>`).join('');
 }
 
-// ── LSTM Chart ─────────────────────────────────────────────────
+// ─── LSTM Chart ───────────────────────────────────────────────────
 function renderChart(grain) {
     const g    = GRAINS[grain];
     const meta = FC_META[grain];
@@ -511,13 +548,13 @@ function renderChart(grain) {
         id: 'fcForecastZone',
         beforeDraw(chart) {
             if (forecastStartIdx < 0) return;
-            const { ctx:c, chartArea, scales } = chart;
+            const { ctx: c, chartArea, scales } = chart;
             const x = scales.x.getPixelForValue(forecastStartIdx);
             if (!x || x > chartArea.right) return;
             c.save();
             c.fillStyle = 'rgba(13,148,136,0.04)';
             c.fillRect(x, chartArea.top, chartArea.right - x, chartArea.bottom - chartArea.top);
-            c.beginPath(); c.setLineDash([6,4]);
+            c.beginPath(); c.setLineDash([6, 4]);
             c.strokeStyle = 'rgba(13,148,136,0.35)'; c.lineWidth = 1.5;
             c.moveTo(x, chartArea.top); c.lineTo(x, chartArea.bottom); c.stroke();
             c.restore();
@@ -533,32 +570,37 @@ function renderChart(grain) {
         data: {
             labels: g.labels || [],
             datasets: [
-                { label:'Actual Volume',         data:g.actual||[],          borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,0.06)', borderWidth:2, fill:true,  tension:0.3, pointRadius:grain==='yearly'?4:(grain==='monthly'?3:0), pointHoverRadius:5, spanGaps:false },
-                { label:'Model Fit (In-Sample)', data:g.predicted||[],       borderColor:'#a78bfa', borderDash:[5,4], backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, pointHoverRadius:4, tension:0.3, spanGaps:false },
-                { label:'Forecast',              data:g.forecast||[],        borderColor:'#0d9488', backgroundColor:'transparent', borderWidth:2.5, pointRadius:grain==='yearly'?5:(grain==='monthly'?4:2), pointHoverRadius:6, pointBackgroundColor:'#0d9488', tension:0.3, spanGaps:false },
-                { label:'Upper 95% CI',          data:g.forecast_upper||[],  borderColor:'rgba(13,148,136,0.25)', backgroundColor:'transparent', borderWidth:1, borderDash:[3,3], pointRadius:0, spanGaps:false, fill:false },
-                { label:'Lower 95% CI',          data:g.forecast_lower||[],  borderColor:'rgba(13,148,136,0.25)', backgroundColor:'rgba(13,148,136,0.08)', borderWidth:1, borderDash:[3,3], pointRadius:0, spanGaps:false, fill:'-1' },
+                { label:'Actual Volume',         data:g.actual||[],         borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,0.06)', borderWidth:2, fill:true,  tension:0.3, pointRadius:grain==='yearly'?4:(grain==='monthly'?3:0), pointHoverRadius:5, spanGaps:false },
+                { label:'Model Fit (In-Sample)', data:g.predicted||[],      borderColor:'#a78bfa', borderDash:[5,4], backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, pointHoverRadius:4, tension:0.3, spanGaps:false },
+                { label:'Forecast',              data:g.forecast||[],       borderColor:'#0d9488', backgroundColor:'transparent', borderWidth:2.5, pointRadius:grain==='yearly'?5:(grain==='monthly'?4:2), pointHoverRadius:6, pointBackgroundColor:'#0d9488', tension:0.3, spanGaps:false },
+                { label:'Upper 95% CI',          data:g.forecast_upper||[], borderColor:'rgba(13,148,136,0.25)', backgroundColor:'transparent', borderWidth:1, borderDash:[3,3], pointRadius:0, spanGaps:false, fill:false },
+                { label:'Lower 95% CI',          data:g.forecast_lower||[], borderColor:'rgba(13,148,136,0.25)', backgroundColor:'rgba(13,148,136,0.08)', borderWidth:1, borderDash:[3,3], pointRadius:0, spanGaps:false, fill:'-1' },
             ]
         },
         options: {
-            responsive:true, maintainAspectRatio:false,
-            interaction:{ mode:'index', intersect:false },
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
             scales: {
-                x:{ grid:{color:'rgba(226,232,240,0.8)'}, ticks:{color:'#94a3b8',maxTicksLimit:meta.xLimit,maxRotation:45,font:{size:11,family:"'Inter',sans-serif"}} },
-                y:{ beginAtZero:true, grid:{color:'rgba(226,232,240,0.8)'}, ticks:{color:'#94a3b8',font:{size:11},callback:v=>v!==null?v.toLocaleString():''}, title:{display:true,text:'Clients',color:'#94a3b8',font:{size:11}} }
+                x: { grid:{ color:'rgba(226,232,240,0.8)' }, ticks:{ color:'#94a3b8', maxTicksLimit:meta.xLimit, maxRotation:45, font:{ size:11, family:"'Inter',sans-serif" } } },
+                y: { beginAtZero:true, grid:{ color:'rgba(226,232,240,0.8)' }, ticks:{ color:'#94a3b8', font:{ size:11 }, callback: v => v !== null ? v.toLocaleString() : '' }, title:{ display:true, text:'Clients', color:'#94a3b8', font:{ size:11 } } }
             },
             plugins: {
-                legend:{ position:'top', labels:{ color:'#334155', font:{size:12,weight:'600',family:"'Inter',sans-serif"}, boxWidth:24, padding:16, filter:item=>!item.text.includes('CI') } },
-                tooltip:{
+                legend: { position:'top', labels:{ color:'#334155', font:{ size:12, weight:'600', family:"'Inter',sans-serif" }, boxWidth:24, padding:16, filter: item => !item.text.includes('CI') } },
+                tooltip: {
                     backgroundColor:'#1e293b', borderColor:'#334155', borderWidth:1,
                     titleColor:'#f8fafc', bodyColor:'#cbd5e1', padding:10,
-                    callbacks:{
-                        label(c){ if(c.parsed.y===null||c.dataset.label.includes('CI')) return null; return ` ${c.dataset.label}: ${Math.round(c.parsed.y).toLocaleString()} clients`; },
-                        afterBody(items){
-                            const idx=items[0]?.dataIndex; if(idx===undefined) return [];
-                            const gg=GRAINS[currentGrain];
-                            const lo=(gg.forecast_lower||[])[idx], hi=(gg.forecast_upper||[])[idx];
-                            if(lo===null||hi===null||lo===undefined) return [];
+                    callbacks: {
+                        label(c) {
+                            if (c.parsed.y === null || c.dataset.label.includes('CI')) return null;
+                            return ` ${c.dataset.label}: ${Math.round(c.parsed.y).toLocaleString()} clients`;
+                        },
+                        afterBody(items) {
+                            const idx = items[0]?.dataIndex;
+                            if (idx === undefined) return [];
+                            const gg = GRAINS[currentGrain];
+                            const lo = (gg.forecast_lower || [])[idx];
+                            const hi = (gg.forecast_upper || [])[idx];
+                            if (lo === null || hi === null || lo === undefined) return [];
                             return [`  95% CI: ${Math.round(lo).toLocaleString()} – ${Math.round(hi).toLocaleString()}`];
                         }
                     }
@@ -568,28 +610,31 @@ function renderChart(grain) {
     });
 }
 
-// ── Table ──────────────────────────────────────────────────────
-function filterTable() {
+// ─── Table ────────────────────────────────────────────────────────
+function renderTable() {
     const body = document.getElementById('table-body');
     if (!body) return;
-    body.innerHTML = csvData.slice(0,8).map(r => {
-        const d = new Date(r.date);
-        const fmtDate = isNaN(d) ? r.date : d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-        const st = r.status || 'Logged';
-        const color = st.toLowerCase()==='pending' ? '#f59e0b' : st.toLowerCase()==='approved' ? '#10b981' : '#64748b';
+    body.innerHTML = csvData.slice(0, 8).map(r => {
+        const d       = new Date(r.date);
+        const fmtDate = isNaN(d) ? r.date : d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+        const st      = r.status || 'Logged';
+        const color   = st.toLowerCase() === 'pending'  ? '#f59e0b'
+                      : st.toLowerCase() === 'approved' ? '#10b981'
+                      : '#64748b';
         return `<tr>
             <td style="font-weight:500">${fmtDate}</td>
-            <td style="color:#1e293b;font-weight:600">${r.cause||'Not Specified'}</td>
-            <td>${r.type||'Not Specified'}</td>
+            <td style="color:#1e293b;font-weight:600">${r.cause || 'Not Specified'}</td>
+            <td>${r.type || 'Not Specified'}</td>
             <td><span style="color:${color};font-size:12px"><i class="fas fa-check-circle"></i> ${st}</span></td>
         </tr>`;
     }).join('');
 }
 
-// ── Heatmap ────────────────────────────────────────────────────
+// ─── Heatmap ──────────────────────────────────────────────────────
 function initHeatmap() {
-    const map = L.map('map',{scrollWheelZoom:false}).setView([14.6839,121.0860],13);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{attribution:'&copy; OpenStreetMap'}).addTo(map);
+    const map = L.map('map', { scrollWheelZoom: false }).setView([14.6839, 121.0860], 13);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+
     const coordMap = {
         "Alicia":[14.6601,121.0253],"Bagong Pag-asa":[14.6544,121.0336],"Bahay Toro":[14.6713,121.0264],
         "Bungad":[14.6517,121.0210],"Del Monte":[14.6391,121.0116],"Laging Handa":[14.6367,121.0360],
@@ -611,21 +656,23 @@ function initHeatmap() {
         "Tandang Sora":[14.6775,121.0433],"Pasong Tamo":[14.6732,121.0610],"Culiat":[14.6644,121.0515],
         "Sauyo":[14.6896,121.0431],"Talipapa":[14.6901,121.0208],"Baesa":[14.6706,121.0113],
         "Sangandaan":[14.6749,121.0252],"Apolonio Samson":[14.6534,121.0069],"Unang Sigaw":[14.6538,121.0016],
-        "Fairview Village":[14.7011,121.0583],"Project 4":[14.6191,121.0682],"Project 8":[14.6756,121.0219]
+        "Project 4":[14.6191,121.0682],"Project 8":[14.6756,121.0219]
     };
+
     const pts = mapData.map(loc => {
         const name   = loc.name ? loc.name.trim() : '';
-        const coords = (loc.lat && loc.lng) ? [loc.lat,loc.lng] : coordMap[name];
-        return coords ? [...coords, Math.min(loc.count/50,1)] : null;
+        const coords = (loc.lat && loc.lng) ? [loc.lat, loc.lng] : coordMap[name];
+        return coords ? [...coords, Math.min(loc.count / 50, 1)] : null;
     }).filter(Boolean);
-    L.heatLayer(pts,{radius:35,blur:20,max:1.0,minOpacity:0.5,gradient:{0.4:'blue',0.6:'cyan',0.7:'lime',0.8:'yellow',1.0:'red'}}).addTo(map);
+
+    L.heatLayer(pts, { radius:35, blur:20, max:1.0, minOpacity:0.5, gradient:{ 0.4:'blue', 0.6:'cyan', 0.7:'lime', 0.8:'yellow', 1.0:'red' } }).addTo(map);
 }
 
-// ── Init ───────────────────────────────────────────────────────
+// ─── Init ─────────────────────────────────────────────────────────
 window.onload = () => {
-    filterTable();
+    renderTable();
     initHeatmap();
-    switchGrain('monthly');
+    switchGrain('monthly'); // boots everything: insights + chart + metrics
 };
 </script>
 </body>
