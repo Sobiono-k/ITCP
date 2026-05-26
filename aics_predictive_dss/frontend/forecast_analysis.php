@@ -1,4 +1,5 @@
 <?php
+set_time_limit(0);
 // forecast_analysis.php
 
 session_start(); // THIS MUST BE THE VERY FIRST LINE
@@ -201,18 +202,16 @@ $conn->close();
 
 <div class="main">
     <div class="header-area">
-        <h1>Predictive Decision Support Dashboard</h1>
+        <h1>Request Volume Forecast</h1>
         <p>AICS Program of DSWD <i class="fas fa-chevron-right" style="font-size: 10px; margin: 0 5px;"></i> Batasan Hills</p>
+        <p style="margin:4px 0 0; color:#8392ab; font-size:13px;">LSTM-powered predictions — historical data 2022 – 2026 with forward projections</p>
     </div>
 
     <div style="max-width:100%; margin:0 auto; display:flex; flex-direction:column; gap:28px;">
 
         <!-- Tab Switcher Header -->
         <div style="display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px;">
-            <div>
-                <h2 style="margin:0; font-size:20px; font-weight:700; color:#344767;">AICS Client Volume Forecast</h2>
-                <p style="margin:4px 0 0; color:#8392ab; font-size:13px;">LSTM-powered predictions — historical data 2022 – 2026 with forward projections</p>
-            </div>
+
             <div style="display:inline-flex; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:12px; padding:4px; gap:4px;">
                 <button onclick="switchTab('weekly')" id="tab-weekly"
                     class="tab-btn active-tab" style="padding:8px 20px; border-radius:8px; font-size:13px; font-weight:600; transition:all .2s;">
@@ -256,7 +255,7 @@ $conn->close();
         <!-- LSTM Chart -->
         <div class="lstm-panel">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-                <h3 style="margin:0;font-weight:700;color:#344767;font-size:16px;" id="chartTitle">Weekly Client Volume — 2022 to Forecast</h3>
+                <h3 style="margin:0;font-weight:700;color:#344767;font-size:16px;" id="chartTitle">Weekly Request Volume — 2022 to Forecast</h3>
                 <span style="font-size:12px;color:#8392ab;" id="forecastNote"></span>
             </div>
             <div style="position:relative;">
